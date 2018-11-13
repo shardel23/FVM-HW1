@@ -10,17 +10,19 @@ import il.ac.bgu.cs.fvm.programgraph.ActionDef;
 import il.ac.bgu.cs.fvm.programgraph.ConditionDef;
 import il.ac.bgu.cs.fvm.programgraph.ProgramGraph;
 import il.ac.bgu.cs.fvm.transitionsystem.AlternatingSequence;
+import il.ac.bgu.cs.fvm.transitionsystem.Transition;
 import il.ac.bgu.cs.fvm.transitionsystem.TransitionSystem;
 import il.ac.bgu.cs.fvm.util.Pair;
 import il.ac.bgu.cs.fvm.verification.VerificationResult;
 import java.io.InputStream;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * Implement the methods in this class. You may add additional classes as you
- * want, as long as they live in the {@code impl} package, or one of its 
+ * want, as long as they live in the {@code impl} package, or one of its
  * sub-packages.
  */
 public class FvmFacadeImpl implements FvmFacade {
@@ -42,47 +44,91 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S, A, P> boolean isExecution(TransitionSystem<S, A, P> ts, AlternatingSequence<S, A> e) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement isExecution
+        return (isInitialExecutionFragment(ts, e) && isMaximalExecutionFragment(ts, e));
     }
 
     @Override
     public <S, A, P> boolean isExecutionFragment(TransitionSystem<S, A, P> ts, AlternatingSequence<S, A> e) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement isExecutionFragment
+        AlternatingSequence<S, A> sa = e;
+        AlternatingSequence<A, S> as;
+        Set<Transition<S,A>> transitions = ts.getTransitions();
+        while (!sa.tail().isEmpty()) {
+            S from = sa.head();
+            as = sa.tail();
+            A action = as.head();
+            sa = as.tail();
+            S to = sa.head();
+            if (!transitions.contains(new Transition<>(from, action, to))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
     public <S, A, P> boolean isInitialExecutionFragment(TransitionSystem<S, A, P> ts, AlternatingSequence<S, A> e) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement isInitialExecutionFragment
+        if (!isExecutionFragment(ts, e)) {
+            return false;
+        }
+        Set<S> i = ts.getInitialStates();
+        return (i.contains(e.head()));
     }
 
     @Override
     public <S, A, P> boolean isMaximalExecutionFragment(TransitionSystem<S, A, P> ts, AlternatingSequence<S, A> e) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement isMaximalExecutionFragment
+        if (!isExecutionFragment(ts, e)) {
+            return false;
+        }
+        return (post(ts, e.last()).isEmpty());
     }
 
     @Override
     public <S, A> boolean isStateTerminal(TransitionSystem<S, A, ?> ts, S s) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement isStateTerminal
+        return (post(ts, s).isEmpty());
     }
 
     @Override
     public <S> Set<S> post(TransitionSystem<S, ?, ?> ts, S s) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement post
+        Set<S> reachableStates = new HashSet<>();
+        Set<? extends Transition<S, ?>> transitions = ts.getTransitions();
+        for (Transition<S,?> transition : transitions) {
+            if (transition.getFrom().equals(s)) {
+                reachableStates.add(transition.getTo());
+            }
+        }
+        return reachableStates;
     }
 
     @Override
     public <S> Set<S> post(TransitionSystem<S, ?, ?> ts, Set<S> c) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement post
+        Set<S> reachableStates = new HashSet<>();
+        for (S state : c) {
+            Set<S> reachableFromState = post(ts, state);
+            reachableStates.addAll(reachableFromState);
+        }
+        return reachableStates;
     }
 
     @Override
     public <S, A> Set<S> post(TransitionSystem<S, A, ?> ts, S s, A a) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement post
+        Set<S> reachableStates = new HashSet<>();
+        Set<Transition<S,A>> transitions = ts.getTransitions();
+        for (Transition<S,A> transition : transitions) {
+            if (transition.getFrom().equals(s) && transition.getAction().equals(a)) {
+                reachableStates.add(transition.getTo());
+            }
+        }
+        return reachableStates;
     }
 
     @Override
     public <S, A> Set<S> post(TransitionSystem<S, A, ?> ts, Set<S> c, A a) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement post
+        Set<S> reachableStates = new HashSet<>();
+        for (S state : c) {
+            Set<S> reachableFromState = post(ts, state, a);
+            reachableStates.addAll(reachableFromState);
+        }
+        return reachableStates;
     }
 
     @Override
@@ -107,7 +153,20 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S, A> Set<S> reach(TransitionSystem<S, A, ?> ts) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement reach
+        Set<S> reachableStates = new HashSet<>();
+        for (S initialState : ts.getInitialStates()) {
+            reach(initialState, ts, reachableStates);
+        }
+        return reachableStates;
+    }
+
+    private <S, A> void reach(S s, TransitionSystem<S, A, ?> ts, Set<S> reachableStates) {
+        for (S state : post(ts, s)) {
+            if (!reachableStates.contains(state)) {
+                reachableStates.add(state);
+                reach(state, ts, reachableStates);
+            }
+        }
     }
 
     @Override
@@ -179,5 +238,5 @@ public class FvmFacadeImpl implements FvmFacade {
     public <L> Automaton<?, L> GNBA2NBA(MultiColorAutomaton<?, L> mulAut) {
         throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement GNBA2NBA
     }
-   
+
 }
