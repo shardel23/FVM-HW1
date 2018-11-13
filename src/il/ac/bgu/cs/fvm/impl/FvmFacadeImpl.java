@@ -34,12 +34,43 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S, A, P> boolean isActionDeterministic(TransitionSystem<S, A, P> ts) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement isActionDeterministic
+        Set<A> actions = ts.getActions();
+        Set<S> states = ts.getStates();
+        if(ts.getInitialStates().size() > 1)
+            return false;
+        for(A act : actions){
+            for(S state : states){
+                if(post(ts, state, act).size() > 1){
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     @Override
     public <S, A, P> boolean isAPDeterministic(TransitionSystem<S, A, P> ts) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement isAPDeterministic
+        Set<S> states = ts.getStates();
+        Set<P> APs = ts.getAtomicPropositions();
+
+        for(S state : states){
+            Set<S> statePosts = post(ts, state);
+            for(S statePost : statePosts){
+                for(S statePost2 : statePosts){
+                    if(statePost == statePost2){
+                        continue;
+                    }
+                    else{
+                        //check labels;
+                        Set<P> firstAP = ts.getLabel(statePost);
+                        Set<P> secondAP = ts.getLabel(statePost2);
+                        if(firstAP.equals(secondAP))
+                            return false;
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     @Override
@@ -133,22 +164,44 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S> Set<S> pre(TransitionSystem<S, ?, ?> ts, S s) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement pre
+        Set<S> preOfs = new HashSet<>();
+        Set<? extends Transition<S, ?>> transitions = ts.getTransitions();
+        for(Transition<S,?> transition : transitions){
+            if(transition.getTo().equals(s)){
+                preOfs.add(transition.getFrom());
+            }
+        }
+        return preOfs;
     }
 
     @Override
     public <S> Set<S> pre(TransitionSystem<S, ?, ?> ts, Set<S> c) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement pre
+        Set<S> pres = new HashSet<>();
+        for(S state : c){
+            pres.addAll(pre(ts,state));
+        }
+        return pres;
     }
 
     @Override
     public <S, A> Set<S> pre(TransitionSystem<S, A, ?> ts, S s, A a) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement pre
+        Set<S> preOfsWitha = new HashSet<>();
+        Set<Transition<S, A>> transitions = ts.getTransitions();
+        for(Transition<S,A> transition : transitions){
+            if(transition.getTo().equals(s) && transition.getAction().equals(a)){
+                preOfsWitha.add(transition.getFrom());
+            }
+        }
+        return preOfsWitha;
     }
 
     @Override
     public <S, A> Set<S> pre(TransitionSystem<S, A, ?> ts, Set<S> c, A a) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement pre
+        Set<S> pres = new HashSet<>();
+        for(S state : c){
+            pres.addAll(pre(ts,state, a));
+        }
+        return pres;
     }
 
     @Override
@@ -171,7 +224,82 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S1, S2, A, P> TransitionSystem<Pair<S1, S2>, A, P> interleave(TransitionSystem<S1, A, P> ts1, TransitionSystem<S2, A, P> ts2) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement interleave
+        TransitionSystem<Pair<S1, S2>, A, P> system = createTransitionSystem();
+        ArrayList<Pair<S1, S2>> states = new ArrayList<>(ts1.getStates().size() * ts2.getStates().size());
+        for(S1 ts1State : ts1.getStates()){
+            for(S2 ts2State : ts2.getStates()){
+                states.add(new Pair<>(ts1State, ts2State));
+            }
+        }
+        system.addAllStates(states);
+
+        Set<A> systemActions = new HashSet<>();
+        systemActions.addAll(ts1.getActions());
+        systemActions.addAll(ts2.getActions());
+        system.addAllActions(systemActions);
+
+        Set<P> systemProp = new HashSet<>();
+        systemProp.addAll(ts1.getAtomicPropositions());
+        systemProp.addAll(ts2.getAtomicPropositions());
+        system.addAllAtomicPropositions(systemProp);
+
+        for(Transition<S1, A> transition : ts1.getTransitions()){
+            for(Pair<S1, S2> pair1 : getPairsOfLeft(system, transition.getFrom())) {
+                for(Pair<S1, S2> pair2 : getPairsOfLeft(system, transition.getTo())){
+                    if(pair1.second.equals(pair2.second)){
+                        system.addTransition(new Transition<>(pair1, transition.getAction(), pair2));
+                    }
+                }
+            }
+        }
+
+        for(Transition<S2, A> transition : ts2.getTransitions()){
+            for(Pair<S1, S2> pair1 : getPairsOfRight(system, transition.getFrom())) {
+                for(Pair<S1, S2> pair2 : getPairsOfRight(system, transition.getTo())){
+                    if(pair1.first.equals(pair2.first)){
+                        system.addTransition(new Transition<>(pair1, transition.getAction(), pair2));
+                    }
+                }
+            }
+        }
+
+        //TODO: check if needed shallow or deep
+        for(S1 state1 : ts1.getInitialStates()){
+            for(S2 state2 : ts2.getInitialStates()){
+                system.setInitial(new Pair<S1, S2>(state1, state2), true);
+            }
+        }
+
+        for(Pair<S1, S2> state : system.getStates()){
+            for(P label : ts1.getLabel(state.first)){
+                system.addToLabel(state, label);
+            }
+            for(P label : ts2.getLabel(state.second)){
+                system.addToLabel(state, label);
+            }
+        }
+
+        return system;
+    }
+
+    private<S1, S2, A, P> Set<Pair<S1, S2>> getPairsOfLeft(TransitionSystem<Pair<S1, S2>, A, P> ts, S1 s){
+        Set<Pair<S1, S2>> pairs = new HashSet<Pair<S1, S2>>();
+        for(Pair<S1, S2>  state : ts.getStates()){
+            if(state.first.equals(s)){
+                pairs.add(state);
+            }
+        }
+        return pairs;
+    }
+
+    private<S1, S2, A> Set<Pair<S1, S2>> getPairsOfRight(TransitionSystem<Pair<S1, S2>, A, ?> ts, S2 s){
+        Set<Pair<S1, S2>> pairs = new HashSet<>();
+        for(Pair<S1, S2>  state : ts.getStates()){
+            if(state.second.equals(s)){
+                pairs.add(state);
+            }
+        }
+        return pairs;
     }
 
     @Override
