@@ -221,62 +221,30 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S1, S2, A, P> TransitionSystem<Pair<S1, S2>, A, P> interleave(TransitionSystem<S1, A, P> ts1, TransitionSystem<S2, A, P> ts2) {
-        TransitionSystem<Pair<S1, S2>, A, P> system = createTransitionSystem();
-        ArrayList<Pair<S1, S2>> states = new ArrayList<>(ts1.getStates().size() * ts2.getStates().size());
-        for(S1 ts1State : ts1.getStates()){
-            for(S2 ts2State : ts2.getStates()){
-                states.add(new Pair<>(ts1State, ts2State));
-            }
-        }
-        system.addAllStates(states);
+        TransitionSystem<Pair<S1, S2>, A, P> newTS = createTransitionSystem();
 
-        Set<A> systemActions = new HashSet<>();
-        systemActions.addAll(ts1.getActions());
-        systemActions.addAll(ts2.getActions());
-        system.addAllActions(systemActions);
+        createStates(ts1, ts2, newTS);
+        createActions(ts1, ts2, newTS);
+        createAtomicPropositions(ts1, ts2, newTS);
+        createTransitions(ts1, ts2, newTS);
+        createInitialStates(ts1, ts2, newTS);
+        createLabels(ts1, ts2, newTS);
 
-        Set<P> systemProp = new HashSet<>();
-        systemProp.addAll(ts1.getAtomicPropositions());
-        systemProp.addAll(ts2.getAtomicPropositions());
-        system.addAllAtomicPropositions(systemProp);
+        return newTS;
+    }
 
-        for(Transition<S1, A> transition : ts1.getTransitions()){
-            for(Pair<S1, S2> pair1 : getPairsOfLeft(system, transition.getFrom())) {
-                for(Pair<S1, S2> pair2 : getPairsOfLeft(system, transition.getTo())){
-                    if(pair1.second.equals(pair2.second)){
-                        system.addTransition(new Transition<>(pair1, transition.getAction(), pair2));
-                    }
-                }
-            }
-        }
+    @Override
+    public <S1, S2, A, P> TransitionSystem<Pair<S1, S2>, A, P> interleave(TransitionSystem<S1, A, P> ts1, TransitionSystem<S2, A, P> ts2, Set<A> handShakingActions) {
+        TransitionSystem<Pair<S1, S2>, A, P> newTS = createTransitionSystem();
 
-        for(Transition<S2, A> transition : ts2.getTransitions()){
-            for(Pair<S1, S2> pair1 : getPairsOfRight(system, transition.getFrom())) {
-                for(Pair<S1, S2> pair2 : getPairsOfRight(system, transition.getTo())){
-                    if(pair1.first.equals(pair2.first)){
-                        system.addTransition(new Transition<>(pair1, transition.getAction(), pair2));
-                    }
-                }
-            }
-        }
+        createStates(ts1, ts2, newTS);
+        createActions(ts1, ts2, newTS);
+        createAtomicPropositions(ts1, ts2, newTS);
+        createTransitions(ts1, ts2, newTS, handShakingActions);
+        createInitialStates(ts1, ts2, newTS);
+        createLabels(ts1, ts2, newTS);
 
-        //TODO: check if needed shallow or deep
-        for(S1 state1 : ts1.getInitialStates()){
-            for(S2 state2 : ts2.getInitialStates()){
-                system.setInitial(new Pair<S1, S2>(state1, state2), true);
-            }
-        }
-
-        for(Pair<S1, S2> state : system.getStates()){
-            for(P label : ts1.getLabel(state.first)){
-                system.addToLabel(state, label);
-            }
-            for(P label : ts2.getLabel(state.second)){
-                system.addToLabel(state, label);
-            }
-        }
-
-        return system;
+        return newTS;
     }
 
     private<S1, S2, A, P> Set<Pair<S1, S2>> getPairsOfLeft(TransitionSystem<Pair<S1, S2>, A, P> ts, S1 s){
@@ -299,9 +267,111 @@ public class FvmFacadeImpl implements FvmFacade {
         return pairs;
     }
 
-    @Override
-    public <S1, S2, A, P> TransitionSystem<Pair<S1, S2>, A, P> interleave(TransitionSystem<S1, A, P> ts1, TransitionSystem<S2, A, P> ts2, Set<A> handShakingActions) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement interleave
+    private <S1, S2, A, P> void createLabels(
+            TransitionSystem<S1, A, P> ts1,
+            TransitionSystem<S2, A, P> ts2,
+            TransitionSystem<Pair<S1, S2>, A, P> newTS) {
+        for (Pair<S1, S2> state : newTS.getStates()) {
+            for (P label : ts1.getLabel(state.first)) {
+                newTS.addToLabel(state, label);
+            }
+            for (P label : ts2.getLabel(state.second)) {
+                newTS.addToLabel(state, label);
+            }
+        }
+    }
+
+    private <S1, S2, A, P> void createInitialStates(
+            TransitionSystem<S1, A, P> ts1,
+            TransitionSystem<S2, A, P> ts2,
+            TransitionSystem<Pair<S1, S2>, A, P> newTS) {
+        //TODO: check if needed shallow or deep
+        for (S1 state1 : ts1.getInitialStates()) {
+            for (S2 state2 : ts2.getInitialStates()) {
+                newTS.setInitial(new Pair<>(state1, state2), true);
+            }
+        }
+    }
+
+    private <S1, S2, A, P> void createStates(
+            TransitionSystem<S1, A, P> ts1,
+            TransitionSystem<S2, A, P> ts2,
+            TransitionSystem<Pair<S1, S2>, A, P> newTS) {
+        ArrayList<Pair<S1, S2>> states =
+                new ArrayList<>(ts1.getStates().size() * ts2.getStates().size());
+        for (S1 ts1State : ts1.getStates()) {
+            for (S2 ts2State : ts2.getStates()) {
+                states.add(new Pair<>(ts1State, ts2State));
+            }
+        }
+        newTS.addAllStates(states);
+    }
+
+    private <S1, S2, A, P> void createAtomicPropositions(
+            TransitionSystem<S1, A, P> ts1,
+            TransitionSystem<S2, A, P> ts2,
+            TransitionSystem<Pair<S1, S2>, A, P> newTS) {
+        Set<P> systemProp = new HashSet<>();
+        systemProp.addAll(ts1.getAtomicPropositions());
+        systemProp.addAll(ts2.getAtomicPropositions());
+        newTS.addAllAtomicPropositions(systemProp);
+    }
+
+    private <S1, S2, A, P> void createActions(
+            TransitionSystem<S1, A, P> ts1,
+            TransitionSystem<S2, A, P> ts2,
+            TransitionSystem<Pair<S1, S2>, A, P> newTS) {
+        Set<A> systemActions = new HashSet<>();
+        systemActions.addAll(ts1.getActions());
+        systemActions.addAll(ts2.getActions());
+        newTS.addAllActions(systemActions);
+    }
+
+    private <S1, S2, A, P> void createTransitions(
+            TransitionSystem<S1, A, P> ts1,
+            TransitionSystem<S2, A, P> ts2,
+            TransitionSystem<Pair<S1, S2>, A, P> newTS) {
+        for (Transition<S1, A> transition : ts1.getTransitions()) {
+            for (Pair<S1, S2> pair1 : getPairsOfLeft(newTS, transition.getFrom())) {
+                for (Pair<S1, S2> pair2 : getPairsOfLeft(newTS, transition.getTo())) {
+                    if (pair1.second.equals(pair2.second)) {
+                        newTS.addTransition(new Transition<>(pair1, transition.getAction(), pair2));
+                    }
+                }
+            }
+        }
+
+        for (Transition<S2, A> transition : ts2.getTransitions()) {
+            for (Pair<S1, S2> pair1 : getPairsOfRight(newTS, transition.getFrom())) {
+                for (Pair<S1, S2> pair2 : getPairsOfRight(newTS, transition.getTo())) {
+                    if (pair1.first.equals(pair2.first)) {
+                        newTS.addTransition(new Transition<>(pair1, transition.getAction(), pair2));
+                    }
+                }
+            }
+        }
+    }
+
+    private <S1, S2, A, P> void createTransitions(
+            TransitionSystem<S1, A, P> ts1,
+            TransitionSystem<S2, A, P> ts2,
+            TransitionSystem<Pair<S1, S2>, A, P> newTS,
+            Set<A> handShakingActions) {
+        for (A action : handShakingActions) {
+            for (Transition<S1, A> transition1 : ts1.getTransitions()) {
+                for (Transition<S2, A> transition2 : ts2.getTransitions()) {
+                    newTS.addTransition(
+                            new Transition<>(
+                                    new Pair<>(transition1.getFrom(), transition2.getFrom()),
+                                    action,
+                                    new Pair<>(transition1.getTo(), transition2.getTo())
+                            )
+                    );
+                }
+            }
+        }
+
+        //TODO: Needs handling all actions which are NOT in handShakingActions
     }
 
     @Override
