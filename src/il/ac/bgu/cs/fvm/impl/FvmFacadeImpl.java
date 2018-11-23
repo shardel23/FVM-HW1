@@ -357,21 +357,46 @@ public class FvmFacadeImpl implements FvmFacade {
             TransitionSystem<S2, A, P> ts2,
             TransitionSystem<Pair<S1, S2>, A, P> newTS,
             Set<A> handShakingActions) {
-        for (A action : handShakingActions) {
-            for (Transition<S1, A> transition1 : ts1.getTransitions()) {
+        for (A action : newTS.getActions()) {
+            if (handShakingActions.contains(action)) {
+                for (Transition<S1, A> transition1 : ts1.getTransitions()) {
+                    for (Transition<S2, A> transition2 : ts2.getTransitions()) {
+                        newTS.addTransition(
+                                new Transition<>(
+                                        new Pair<>(transition1.getFrom(), transition2.getFrom()),
+                                        action,
+                                        new Pair<>(transition1.getTo(), transition2.getTo())
+                                )
+                        );
+                    }
+                }
+            }
+            //TODO: check if needed shallow or deep
+            else {
+                for (Transition<S1, A> transition1 : ts1.getTransitions()) {
+                    for (S2 s2 : ts2.getStates()) {
+                        newTS.addTransition(
+                                new Transition<>(
+                                        new Pair<>(transition1.getFrom(), s2),
+                                        action,
+                                        new Pair<>(transition1.getTo(), s2)
+                                )
+                        );
+                    }
+                }
                 for (Transition<S2, A> transition2 : ts2.getTransitions()) {
-                    newTS.addTransition(
-                            new Transition<>(
-                                    new Pair<>(transition1.getFrom(), transition2.getFrom()),
-                                    action,
-                                    new Pair<>(transition1.getTo(), transition2.getTo())
-                            )
-                    );
+                    for (S1 s1 : ts1.getStates()) {
+                        newTS.addTransition(
+                                new Transition<>(
+                                        new Pair<>(s1, transition2.getFrom()),
+                                        action,
+                                        new Pair<>(s1, transition2.getTo())
+                                )
+                        );
+                    }
                 }
             }
         }
-
-        //TODO: Needs handling all actions which are NOT in handShakingActions
     }
 
     @Override
