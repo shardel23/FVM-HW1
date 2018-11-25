@@ -10,6 +10,7 @@ import il.ac.bgu.cs.fvm.exceptions.StateNotFoundException;
 import il.ac.bgu.cs.fvm.ltl.LTL;
 import il.ac.bgu.cs.fvm.programgraph.ActionDef;
 import il.ac.bgu.cs.fvm.programgraph.ConditionDef;
+import il.ac.bgu.cs.fvm.programgraph.PGTransition;
 import il.ac.bgu.cs.fvm.programgraph.ProgramGraph;
 import il.ac.bgu.cs.fvm.transitionsystem.AlternatingSequence;
 import il.ac.bgu.cs.fvm.transitionsystem.Transition;
@@ -580,7 +581,91 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <L, A> ProgramGraph<L, A> createProgramGraph() {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement createProgramGraph
+        return new ProgramGraph<>() {
+
+            private String name;
+            private Set<L> locations = new HashSet<>();
+            private Set<L> initialLocations = new HashSet<>();
+            private Set<PGTransition<L, A>> transitions = new HashSet<>();
+            private Set<List<String>> initializations = new HashSet<>();
+
+            @Override
+            public void addInitalization(List<String> init) {
+                initializations.add(init);
+            }
+
+            @Override
+            public void setInitial(L location, boolean isInitial) {
+                if (locations.contains(location)) {
+                    if (isInitial) {
+                        initialLocations.add(location);
+                    }
+                    else {
+                        initialLocations.remove(location);
+                    }
+                }
+                else {
+                    throw new IllegalArgumentException("Location " + location + " " +
+                            "is not part of the PG.");
+                }
+            }
+
+            @Override
+            public void addLocation(L l) {
+                locations.add(l);
+            }
+
+            @Override
+            public void addTransition(PGTransition<L, A> t) {
+                transitions.add(t);
+            }
+
+            @Override
+            public Set<List<String>> getInitalizations() {
+                return initializations;
+            }
+
+            @Override
+            public Set<L> getInitialLocations() {
+                return initialLocations;
+            }
+
+            @Override
+            public Set<L> getLocations() {
+                return locations;
+            }
+
+            @Override
+            public String getName() {
+                return name;
+            }
+
+            @Override
+            public Set<PGTransition<L, A>> getTransitions() {
+                return transitions;
+            }
+
+            @Override
+            public void removeLocation(L l) {
+                locations.remove(l);
+                initialLocations.remove(l);
+                for (PGTransition<L, A> transition : transitions) {
+                    if (transition.getFrom().equals(l) || transition.getTo().equals(l)) {
+                        transitions.remove(transition);
+                    }
+                }
+            }
+
+            @Override
+            public void removeTransition(PGTransition<L, A> t) {
+                transitions.remove(t);
+            }
+
+            @Override
+            public void setName(String name) {
+                this.name = name;
+            }
+        };
     }
 
     @Override
@@ -594,8 +679,20 @@ public class FvmFacadeImpl implements FvmFacade {
     }
 
     @Override
-    public <L, A> TransitionSystem<Pair<L, Map<String, Object>>, A, String> transitionSystemFromProgramGraph(ProgramGraph<L, A> pg, Set<ActionDef> actionDefs, Set<ConditionDef> conditionDefs) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement transitionSystemFromProgramGraph
+    public <L, A> TransitionSystem<Pair<L, Map<String, Object>>, A, String> transitionSystemFromProgramGraph(
+            ProgramGraph<L, A> pg,
+            Set<ActionDef> actionDefs,
+            Set<ConditionDef> conditionDefs) {
+        TransitionSystem<Pair<L, Map<String, Object>>, A, String> newTS =
+                this.createTransitionSystem();
+        //TODO: Build the transition system.
+        Map<String, Object> something = null;
+        for (L location : pg.getLocations()) {
+            for (int i : new int[1]) { // TODO: Replace this with Eval(Var)
+                newTS.addState(new Pair<>(location, something));
+            }
+        }
+        return newTS;
     }
 
     @Override
