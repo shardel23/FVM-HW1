@@ -1,7 +1,6 @@
 package il.ac.bgu.cs.fvm.impl;
 
-import il.ac.bgu.cs.fvm.exceptions.FVMException;
-import il.ac.bgu.cs.fvm.exceptions.StateNotFoundException;
+import il.ac.bgu.cs.fvm.exceptions.*;
 import il.ac.bgu.cs.fvm.transitionsystem.Transition;
 import il.ac.bgu.cs.fvm.transitionsystem.TransitionSystem;
 
@@ -50,9 +49,10 @@ public class TransitionSystemImpl <S, A, P> implements TransitionSystem< S, A, P
 
     @Override
     public void addTransition(Transition<S, A> t) throws FVMException {
-        if (transitions.contains(t)) {
-            throw new FVMException("Can't add transition " + t + ". " +
-                    "this transition is already part of the transition system.");
+        if (!states.keySet().contains(t.getTo()) ||
+                !states.keySet().contains(t.getFrom()) ||
+                !actions.contains(t.getAction())) {
+            throw new InvalidTransitionException(t);
         }
         transitions.add(t);
     }
@@ -88,6 +88,9 @@ public class TransitionSystemImpl <S, A, P> implements TransitionSystem< S, A, P
 
     @Override
     public Set<P> getLabel(S s) {
+        if (labels.get(s) == null) {
+            throw new StateNotFoundException(s);
+        }
         return labels.get(s);
     }
 
@@ -119,26 +122,23 @@ public class TransitionSystemImpl <S, A, P> implements TransitionSystem< S, A, P
 
     @Override
     public void removeAction(A a) throws FVMException {
-        if (!actions.remove(a)) {
-            throw new FVMException("Can't remove action " + a + ". " +
-                    "this action is not part of the transition system.");
-        }
         for (Transition<S, A> transition : transitions) {
             if (transition.getAction().equals(a)) {
-                transitions.remove(transition);
+                throw new DeletionOfAttachedActionException(a, TransitionSystemPart.TRANSITIONS);
             }
         }
+        actions.remove(a);
     }
 
     @Override
     public void removeAtomicProposition(P p) throws FVMException {
-        if (!atomicPropositions.remove(p)) {
-            throw new FVMException("Can't remove atomic proposition " + p + ". " +
-                    "this atomic proposition is not part of the transition system.");
-        }
         for (Set<P> label : labels.values()) {
-            label.remove(p);
+            if (label.contains(p)) {
+                throw new DeletionOfAttachedAtomicPropositionException(
+                        p, TransitionSystemPart.LABELING_FUNCTION);
+            }
         }
+        atomicPropositions.remove(p);
     }
 
     @Override
@@ -151,16 +151,21 @@ public class TransitionSystemImpl <S, A, P> implements TransitionSystem< S, A, P
 
     @Override
     public void removeState(S s) throws FVMException {
-        if (!states.remove(s)) {
-            throw new FVMException("Can't remove state " + s + ". " +
-                    "this state is not part of the transition system.");
-        }
-        labels.remove(s);
         for (Transition<S, A> transition : transitions) {
             if (transition.getFrom().equals(s) || transition.getTo().equals(s)) {
-                transitions.remove(transition);
+                throw new DeletionOfAttachedStateException(s, TransitionSystemPart.TRANSITIONS);
+                //"Can't remove state " + s + ". " + "this state is part of a transition.");
             }
         }
+        if (labels.get(s) == null || !labels.get(s).isEmpty()) {
+            throw new DeletionOfAttachedStateException(s, TransitionSystemPart.LABELING_FUNCTION);
+            //"Can't remove state " + s + ". " + "this state is labeled.");
+        }
+        if (states.get(s)) {
+            throw new DeletionOfAttachedStateException(s, TransitionSystemPart.INITIAL_STATES);
+            //"Can't remove state " + s + ". " + "this state is initial state.");
+        }
+        states.remove(s);
     }
 
     @Override
