@@ -74,16 +74,10 @@ public class TransitionSystemImpl <S, A, P> implements TransitionSystem< S, A, P
 
     @Override
     public void addToLabel(S s, P l) throws FVMException {
-        Set<P> currentLabels = labels.get(s);
-        if (currentLabels == null) {
-            throw new FVMException("Can't label state " + s + ". " +
-                    "the state is not part of the transition system.");
+        if (!atomicPropositions.contains(l)) {
+            throw new InvalidLablingPairException(s, l);
         }
-        if (currentLabels.contains(l)) {
-            throw new FVMException("Can't label state " + s + " with " + l + ". " +
-                    "this label is already part of the state's labels.");
-        }
-        currentLabels.add(l);
+        labels.get(s).add(l);
     }
 
     @Override

@@ -5,6 +5,7 @@ import il.ac.bgu.cs.fvm.automata.Automaton;
 import il.ac.bgu.cs.fvm.automata.MultiColorAutomaton;
 import il.ac.bgu.cs.fvm.channelsystem.ChannelSystem;
 import il.ac.bgu.cs.fvm.circuits.Circuit;
+import il.ac.bgu.cs.fvm.exceptions.ActionNotFoundException;
 import il.ac.bgu.cs.fvm.exceptions.FVMException;
 import il.ac.bgu.cs.fvm.exceptions.StateNotFoundException;
 import il.ac.bgu.cs.fvm.ltl.LTL;
@@ -36,11 +37,11 @@ public class FvmFacadeImpl implements FvmFacade {
     public <S, A, P> boolean isActionDeterministic(TransitionSystem<S, A, P> ts) {
         Set<A> actions = ts.getActions();
         Set<S> states = ts.getStates();
-        if(ts.getInitialStates().size() > 1)
+        if (ts.getInitialStates().size() > 1)
             return false;
-        for(A act : actions){
-            for(S state : states){
-                if(post(ts, state, act).size() > 1){
+        for (A act : actions) {
+            for (S state : states) {
+                if (post(ts, state, act).size() > 1) {
                     return false;
                 }
             }
@@ -53,18 +54,21 @@ public class FvmFacadeImpl implements FvmFacade {
         Set<S> states = ts.getStates();
         Set<P> APs = ts.getAtomicPropositions();
 
-        for(S state : states){
+        if (ts.getInitialStates().size() > 1) {
+            return false;
+        }
+
+        for (S state : states) {
             Set<S> statePosts = post(ts, state);
-            for(S statePost : statePosts){
-                for(S statePost2 : statePosts){
-                    if(statePost == statePost2){
+            for (S statePost : statePosts) {
+                for (S statePost2 : statePosts) {
+                    if (statePost == statePost2) {
                         continue;
-                    }
-                    else{
+                    } else {
                         //check labels;
                         Set<P> firstAP = ts.getLabel(statePost);
                         Set<P> secondAP = ts.getLabel(statePost2);
-                        if(firstAP.equals(secondAP))
+                        if (firstAP.equals(secondAP))
                             return false;
                     }
                 }
@@ -82,13 +86,22 @@ public class FvmFacadeImpl implements FvmFacade {
     public <S, A, P> boolean isExecutionFragment(TransitionSystem<S, A, P> ts, AlternatingSequence<S, A> e) {
         AlternatingSequence<S, A> sa = e;
         AlternatingSequence<A, S> as;
-        Set<Transition<S,A>> transitions = ts.getTransitions();
+        Set<Transition<S, A>> transitions = ts.getTransitions();
         while (!sa.tail().isEmpty()) {
             S from = sa.head();
             as = sa.tail();
             A action = as.head();
             sa = as.tail();
             S to = sa.head();
+            if (!ts.getStates().contains(from)) {
+                throw new StateNotFoundException(from);
+            }
+            if (!ts.getActions().contains(action)) {
+                throw new ActionNotFoundException(action);
+            }
+            if (!ts.getStates().contains(to)) {
+                throw new StateNotFoundException(to);
+            }
             if (!transitions.contains(new Transition<>(from, action, to))) {
                 return false;
             }
@@ -120,6 +133,9 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S> Set<S> post(TransitionSystem<S, ?, ?> ts, S s) {
+        if (!ts.getStates().contains(s)) {
+            throw new StateNotFoundException(s);
+        }
         Set<S> reachableStates = new HashSet<>();
         Set<? extends Transition<S, ?>> transitions = ts.getTransitions();
         for (Transition<S,?> transition : transitions) {
@@ -142,6 +158,12 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S, A> Set<S> post(TransitionSystem<S, A, ?> ts, S s, A a) {
+        if (!ts.getStates().contains(s)) {
+            throw new StateNotFoundException(s);
+        }
+        if (!ts.getActions().contains(a)) {
+            throw new ActionNotFoundException(a);
+        }
         Set<S> reachableStates = new HashSet<>();
         Set<Transition<S,A>> transitions = ts.getTransitions();
         for (Transition<S,A> transition : transitions) {
@@ -154,6 +176,9 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S, A> Set<S> post(TransitionSystem<S, A, ?> ts, Set<S> c, A a) {
+        if (!ts.getActions().contains(a)) {
+            throw new ActionNotFoundException(a);
+        }
         Set<S> reachableStates = new HashSet<>();
         for (S state : c) {
             Set<S> reachableFromState = post(ts, state, a);
@@ -164,6 +189,9 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S> Set<S> pre(TransitionSystem<S, ?, ?> ts, S s) {
+        if (!ts.getStates().contains(s)) {
+            throw new StateNotFoundException(s);
+        }
         Set<S> preOfs = new HashSet<>();
         Set<? extends Transition<S, ?>> transitions = ts.getTransitions();
         for(Transition<S,?> transition : transitions){
@@ -185,6 +213,12 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S, A> Set<S> pre(TransitionSystem<S, A, ?> ts, S s, A a) {
+        if (!ts.getStates().contains(s)) {
+            throw new StateNotFoundException(s);
+        }
+        if (!ts.getActions().contains(a)) {
+            throw new ActionNotFoundException(a);
+        }
         Set<S> preOfsWitha = new HashSet<>();
         Set<Transition<S, A>> transitions = ts.getTransitions();
         for(Transition<S,A> transition : transitions){
@@ -197,6 +231,9 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S, A> Set<S> pre(TransitionSystem<S, A, ?> ts, Set<S> c, A a) {
+        if (!ts.getActions().contains(a)) {
+            throw new ActionNotFoundException(a);
+        }
         Set<S> pres = new HashSet<>();
         for(S state : c){
             pres.addAll(pre(ts,state, a));
@@ -210,6 +247,7 @@ public class FvmFacadeImpl implements FvmFacade {
         for (S initialState : ts.getInitialStates()) {
             reach(initialState, ts, reachableStates);
         }
+        reachableStates.addAll(ts.getInitialStates());
         return reachableStates;
     }
 
