@@ -461,12 +461,50 @@ public class FvmFacadeImpl implements FvmFacade {
         generateTransitionsFromCircuit(c, newTS);
         generateAtomicPropositionsFromCircuit(c, newTS);
         generateLabelsFromCircuit(c, newTS);
+        removeUnreachableFromCircuit(c, newTS);
 
         return newTS;
     }
 
+    private void removeUnreachableFromCircuit(Circuit c, TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object> newTS) {
+        Set<Pair<Map<String, Boolean>, Map<String, Boolean>>> reachableStates = reach(newTS);
+        Set<Pair<Map<String, Boolean>, Map<String, Boolean>>> allStates = newTS.getStates();
+        Set<Pair<Map<String, Boolean>, Map<String, Boolean>>> statesToRemove = new HashSet<>();
+        Set<Transition<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>>> transitions =
+                newTS.getTransitions();
+        Set<Transition<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>>> transitionsToRemove =
+                new HashSet<>();
+        for (Pair<Map<String, Boolean>, Map<String, Boolean>> state : allStates) {
+            if (!reachableStates.contains(state)) {
+                for (Transition<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>> transition : transitions) {
+                   if (transition.getTo().equals(state) || transition.getFrom().equals(state)) {
+                       transitionsToRemove.add(transition);
+                   }
+                }
+                for (Transition<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>> transition : transitionsToRemove) {
+                    newTS.removeTransition(transition);
+                }
+                newTS.getLabelingFunction().remove(state);
+                statesToRemove.add(state);
+            }
+        }
+        for (Pair<Map<String, Boolean>, Map<String, Boolean>> state : statesToRemove) {
+            newTS.removeState(state);
+        }
+    }
+
     private void generateLabelsFromCircuit(Circuit c, TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object> newTS) {
-        // TODO: Implement
+        for (Pair<Map<String, Boolean>, Map<String, Boolean>> state : newTS.getStates()) {
+            Map<String, Boolean> newLabel = new HashMap<>();
+            newLabel.putAll(state.getFirst());
+            newLabel.putAll(state.getSecond());
+            newLabel.putAll(c.computeOutputs(state.getFirst(), state.getSecond()));
+            for (String name : newLabel.keySet()) {
+                if (newLabel.get(name)) {
+                    newTS.addToLabel(state, name);
+                }
+            }
+        }
     }
 
     private void generateAtomicPropositionsFromCircuit(Circuit c, TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object> newTS) {
@@ -482,63 +520,65 @@ public class FvmFacadeImpl implements FvmFacade {
     }
 
     private void generateTransitionsFromCircuit(Circuit c, TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object> newTS) {
-        // TODO: Implement
+        ArrayList<Map<String, Boolean>> inputPortsPermutations = new ArrayList<>();
+        generateBooleanPermutations(inputPortsPermutations, c.getInputPortNames());
         for (Pair<Map<String, Boolean>, Map<String, Boolean>> state : newTS.getStates()) {
-            Map<String, Boolean> updatedRegisters = c.updateRegisters(state.first, state.second);
+            for (Map<String, Boolean> permutation : inputPortsPermutations) {
+                Pair<Map<String, Boolean>, Map<String, Boolean>> updatedState =
+                        new Pair<>(permutation, c.updateRegisters(state.getFirst(), state.getSecond()));
+                newTS.addTransition(new Transition<>(state, permutation, updatedState));
+            }
         }
     }
 
     private void generateInitialStatesFromCircuit(Circuit c, TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object> newTS) {
         ArrayList<Map<String, Boolean>> inputPortsPermutations = new ArrayList<>();
         Map<String, Boolean> registersFalse = new HashMap<>();
-        String[] inputPortNames = (String[]) c.getInputPortNames().toArray();
-        generateBooleanPermutations(inputPortsPermutations, inputPortNames);
+        generateBooleanPermutations(inputPortsPermutations, c.getInputPortNames());
         for (String registerName : c.getRegisterNames()) {
             registersFalse.put(registerName, false);
         }
         for (Map<String, Boolean> inputPortsMap : inputPortsPermutations) {
-            newTS.addState(new Pair<>(registersFalse, inputPortsMap));
+            newTS.setInitial(new Pair<>(inputPortsMap, registersFalse), true);
         }
     }
 
     private void generateActionsFromCircuit(Circuit c, TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object> newTS) {
         ArrayList<Map<String, Boolean>> inputPortsPermutations = new ArrayList<>();
-        String[] inputPortNames = (String[]) c.getInputPortNames().toArray();
-        generateBooleanPermutations(inputPortsPermutations, inputPortNames);
+        generateBooleanPermutations(inputPortsPermutations, c.getInputPortNames());
         newTS.addAllActions(inputPortsPermutations);
     }
 
     private void generateStatesFromCircuit(Circuit c, TransitionSystem<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>, Object> newTS) {
         ArrayList<Map<String, Boolean>> registersPermutations = new ArrayList<>();
         ArrayList<Map<String, Boolean>> inputPortsPermutations = new ArrayList<>();
-        String[] registerNames = (String[])c.getRegisterNames().toArray();
-        String[] inputPortNames = (String[])c.getInputPortNames().toArray();
-        generateBooleanPermutations(registersPermutations, registerNames);
-        generateBooleanPermutations(inputPortsPermutations, inputPortNames);
+        generateBooleanPermutations(registersPermutations, c.getRegisterNames());
+        generateBooleanPermutations(inputPortsPermutations, c.getInputPortNames());
         for (Map<String, Boolean> registersMap : registersPermutations) {
             for (Map<String, Boolean> inputPortsMap : inputPortsPermutations) {
-                newTS.addState(new Pair<>(registersMap, inputPortsMap));
+                newTS.addState(new Pair<>(inputPortsMap, registersMap));
             }
         }
     }
 
     private void generateBooleanPermutations
-            (ArrayList<Map<String, Boolean>> registersPermutations,
-             String[] registerNames) {
-        for (int i=0; i<Math.pow(registerNames.length, 2); i++) {
+            (ArrayList<Map<String, Boolean>> permutations,
+             Set<String> names) {
+        String[] namesArray = names.toArray(new String[0]);
+        for (int i=0; i<Math.pow(2, namesArray.length); i++) {
             Map<String, Boolean> registersMap = new HashMap<>();
             int num = i;
             int index = 0;
-            for (int j=0; j<registerNames.length; j++) {
+            for (int j=0; j<namesArray.length; j++) {
                 if (num % 2 == 1) {
-                    registersMap.put(registerNames[index], true);
+                    registersMap.put(namesArray[index], true);
                 } else {
-                    registersMap.put(registerNames[index], false);
+                    registersMap.put(namesArray[index], false);
                 }
                 index++;
                 num /= 2;
             }
-            registersPermutations.add(registersMap);
+            permutations.add(registersMap);
         }
     }
 

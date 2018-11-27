@@ -148,16 +148,15 @@ public class TransitionSystemImpl <S, A, P> implements TransitionSystem< S, A, P
         for (Transition<S, A> transition : transitions) {
             if (transition.getFrom().equals(s) || transition.getTo().equals(s)) {
                 throw new DeletionOfAttachedStateException(s, TransitionSystemPart.TRANSITIONS);
-                //"Can't remove state " + s + ". " + "this state is part of a transition.");
             }
         }
-        if (labels.get(s) == null || !labels.get(s).isEmpty()) {
-            throw new DeletionOfAttachedStateException(s, TransitionSystemPart.LABELING_FUNCTION);
-            //"Can't remove state " + s + ". " + "this state is labeled.");
+        if (labels.get(s) != null) {
+            if (!labels.get(s).isEmpty()) {
+                throw new DeletionOfAttachedStateException(s, TransitionSystemPart.LABELING_FUNCTION);
+            }
         }
         if (states.get(s)) {
             throw new DeletionOfAttachedStateException(s, TransitionSystemPart.INITIAL_STATES);
-            //"Can't remove state " + s + ". " + "this state is initial state.");
         }
         states.remove(s);
     }
