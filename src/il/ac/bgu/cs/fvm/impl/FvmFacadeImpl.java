@@ -589,14 +589,136 @@ public class FvmFacadeImpl implements FvmFacade {
             Set<ConditionDef> conditionDefs) {
         TransitionSystem<Pair<L, Map<String, Object>>, A, String> newTS =
                 this.createTransitionSystem();
-        //TODO: Build the transition system.
-        Map<String, Object> something = null;
+
+        // STATES
+        Map<L, Set<Map<String, Object>>> locationToEvalsMap =
+                generateEvalsToAllLocations(pg, actionDefs, conditionDefs);
         for (L location : pg.getLocations()) {
-            for (int i : new int[1]) { // TODO: Replace this with Eval(Var)
-                newTS.addState(new Pair<>(location, something));
+            for (Map<String, Object> eval : locationToEvalsMap.get(location)) {
+                Pair<L, Map<String, Object>> state = new Pair<>(location, eval);
+                newTS.addState(state);
+                if (pg.getInitialLocations().contains(location) && isInitialEvaluation(pg, eval)) {
+                    newTS.setInitial(state, true);
+                }
             }
         }
+
+        // ACTIONS
+        Set<A> tsActions = new HashSet<>();
+        for (PGTransition<L, A> pgTransition : pg.getTransitions()) {
+            tsActions.add(pgTransition.getAction());
+        }
+        newTS.addAllActions(tsActions);
+
+        // ATOMIC PROPOSITIONS
+        for (L location : pg.getLocations()) {
+            newTS.addAtomicProposition(location.toString());
+        }
+        for (ConditionDef conditionDef : conditionDefs) {
+            newTS.addAtomicProposition(conditionDef.toString());
+        }
+
+        // LABELING
+        for (Pair<L, Map<String, Object>> state : newTS.getStates()) {
+            newTS.addToLabel(state, state.getSecond().toString());
+        }
+
+        // TRANSITIONS
+        for (PGTransition<L, A> pgTransition : pg.getTransitions()) {
+            L locationFrom = pgTransition.getFrom();
+            String cond = pgTransition.getCondition();
+            A action = pgTransition.getAction();
+            L locationTo = pgTransition.getTo();
+            for (Pair<L, Map<String, Object>> stateFrom : newTS.getStates()) {
+                if (stateFrom.getFirst().equals(locationFrom)) {
+                    for (Pair<L, Map<String, Object>> stateTo : newTS.getStates()) {
+                        if (stateTo.getFirst().equals(locationTo)) {
+                            Map<String, Object> evalFrom = stateFrom.getSecond();
+                            Map<String, Object> evalTo = stateTo.getSecond();
+                            for (ActionDef actionDef : actionDefs) {
+                                if (actionDef.isMatchingAction(action.toString())) {
+                                    if (actionDef.effect(evalFrom, action.toString()).equals(evalTo)) {
+                                        newTS.addTransition(new Transition<>(
+                                                stateFrom,
+                                                action,
+                                                stateTo
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         return newTS;
+    }
+
+    private <A, L> boolean isInitialEvaluation(ProgramGraph<L,A> pg, Map<String, Object> eval) {
+        // TODO: Implement
+        return false;
+    }
+
+    private <L, A> Map<L, Set<Map<String, Object>>> generateEvalsToAllLocations(
+            ProgramGraph<L, A> pg,
+            Set<ActionDef> actionDefs,
+            Set<ConditionDef> conditionDefs) {
+        Map<L, Set<Map<String, Object>>> locationToEvalsMap = new HashMap<>();
+        Map<String, Object> initialEval = getInitialEval(pg);
+        Set<PGTransition<L, A>> pgTransitions = pg.getTransitions();
+        Set<L> pgInitialLocations = pg.getInitialLocations();
+        for (L initialLocation : pgInitialLocations) {
+            generateEvalsToAllLocations(
+                    locationToEvalsMap,
+                    actionDefs,
+                    conditionDefs,
+                    pgTransitions,
+                    initialLocation,
+                    initialEval);
+        }
+        return locationToEvalsMap;
+    }
+
+    private <L, A> void generateEvalsToAllLocations(
+            Map<L, Set<Map<String, Object>>> locationToEvalsMap,
+            Set<ActionDef> actionDefs,
+            Set<ConditionDef> conditionDefs,
+            Set<PGTransition<L,A>> pgTransitions,
+            L location,
+            Map<String, Object> eval) {
+        for (PGTransition<L, A> pgTransition : pgTransitions) {
+            L from = pgTransition.getFrom();
+            if (from.equals(location)) {
+                String cond = pgTransition.getCondition();
+                for (ConditionDef conditionDef : conditionDefs) {
+                    if (conditionDef.evaluate(eval, cond)) {
+                        A action = pgTransition.getAction();
+                        for (ActionDef actionDef : actionDefs) {
+                            if (actionDef.isMatchingAction(action.toString())) {
+                                Map<String, Object> newEval =
+                                        actionDef.effect(eval, action.toString());
+                                L to = pgTransition.getTo();
+                                if (locationToEvalsMap.get(to).add(newEval)) {
+                                    generateEvalsToAllLocations(
+                                            locationToEvalsMap,
+                                            actionDefs,
+                                            conditionDefs,
+                                            pgTransitions,
+                                            to,
+                                            newEval);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private <L, A> Map<String, Object> getInitialEval(ProgramGraph<L, A> pg) {
+        pg.getInitalizations();
+        return null;
     }
 
     @Override
