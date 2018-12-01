@@ -138,7 +138,7 @@ public class FvmFacadeImpl implements FvmFacade {
         }
         Set<S> reachableStates = new HashSet<>();
         Set<? extends Transition<S, ?>> transitions = ts.getTransitions();
-        for (Transition<S,?> transition : transitions) {
+        for (Transition<S, ?> transition : transitions) {
             if (transition.getFrom().equals(s)) {
                 reachableStates.add(transition.getTo());
             }
@@ -165,8 +165,8 @@ public class FvmFacadeImpl implements FvmFacade {
             throw new ActionNotFoundException(a);
         }
         Set<S> reachableStates = new HashSet<>();
-        Set<Transition<S,A>> transitions = ts.getTransitions();
-        for (Transition<S,A> transition : transitions) {
+        Set<Transition<S, A>> transitions = ts.getTransitions();
+        for (Transition<S, A> transition : transitions) {
             if (transition.getFrom().equals(s) && transition.getAction().equals(a)) {
                 reachableStates.add(transition.getTo());
             }
@@ -194,8 +194,8 @@ public class FvmFacadeImpl implements FvmFacade {
         }
         Set<S> preOfs = new HashSet<>();
         Set<? extends Transition<S, ?>> transitions = ts.getTransitions();
-        for(Transition<S,?> transition : transitions){
-            if(transition.getTo().equals(s)){
+        for (Transition<S, ?> transition : transitions) {
+            if (transition.getTo().equals(s)) {
                 preOfs.add(transition.getFrom());
             }
         }
@@ -205,8 +205,8 @@ public class FvmFacadeImpl implements FvmFacade {
     @Override
     public <S> Set<S> pre(TransitionSystem<S, ?, ?> ts, Set<S> c) {
         Set<S> pres = new HashSet<>();
-        for(S state : c){
-            pres.addAll(pre(ts,state));
+        for (S state : c) {
+            pres.addAll(pre(ts, state));
         }
         return pres;
     }
@@ -221,8 +221,8 @@ public class FvmFacadeImpl implements FvmFacade {
         }
         Set<S> preOfsWitha = new HashSet<>();
         Set<Transition<S, A>> transitions = ts.getTransitions();
-        for(Transition<S,A> transition : transitions){
-            if(transition.getTo().equals(s) && transition.getAction().equals(a)){
+        for (Transition<S, A> transition : transitions) {
+            if (transition.getTo().equals(s) && transition.getAction().equals(a)) {
                 preOfsWitha.add(transition.getFrom());
             }
         }
@@ -235,8 +235,8 @@ public class FvmFacadeImpl implements FvmFacade {
             throw new ActionNotFoundException(a);
         }
         Set<S> pres = new HashSet<>();
-        for(S state : c){
-            pres.addAll(pre(ts,state, a));
+        for (S state : c) {
+            pres.addAll(pre(ts, state, a));
         }
         return pres;
     }
@@ -288,20 +288,20 @@ public class FvmFacadeImpl implements FvmFacade {
         return newTS;
     }
 
-    private<S1, S2, A, P> Set<Pair<S1, S2>> getPairsOfLeft(TransitionSystem<Pair<S1, S2>, A, P> ts, S1 s){
+    private <S1, S2, A, P> Set<Pair<S1, S2>> getPairsOfLeft(TransitionSystem<Pair<S1, S2>, A, P> ts, S1 s) {
         Set<Pair<S1, S2>> pairs = new HashSet<>();
-        for(Pair<S1, S2>  state : ts.getStates()){
-            if(state.first.equals(s)){
+        for (Pair<S1, S2> state : ts.getStates()) {
+            if (state.first.equals(s)) {
                 pairs.add(state);
             }
         }
         return pairs;
     }
 
-    private<S1, S2, A> Set<Pair<S1, S2>> getPairsOfRight(TransitionSystem<Pair<S1, S2>, A, ?> ts, S2 s){
+    private <S1, S2, A> Set<Pair<S1, S2>> getPairsOfRight(TransitionSystem<Pair<S1, S2>, A, ?> ts, S2 s) {
         Set<Pair<S1, S2>> pairs = new HashSet<>();
-        for(Pair<S1, S2>  state : ts.getStates()){
-            if(state.second.equals(s)){
+        for (Pair<S1, S2> state : ts.getStates()) {
+            if (state.second.equals(s)) {
                 pairs.add(state);
             }
         }
@@ -477,9 +477,9 @@ public class FvmFacadeImpl implements FvmFacade {
         for (Pair<Map<String, Boolean>, Map<String, Boolean>> state : allStates) {
             if (!reachableStates.contains(state)) {
                 for (Transition<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>> transition : transitions) {
-                   if (transition.getTo().equals(state) || transition.getFrom().equals(state)) {
-                       transitionsToRemove.add(transition);
-                   }
+                    if (transition.getTo().equals(state) || transition.getFrom().equals(state)) {
+                        transitionsToRemove.add(transition);
+                    }
                 }
                 for (Transition<Pair<Map<String, Boolean>, Map<String, Boolean>>, Map<String, Boolean>> transition : transitionsToRemove) {
                     newTS.removeTransition(transition);
@@ -565,11 +565,11 @@ public class FvmFacadeImpl implements FvmFacade {
             (ArrayList<Map<String, Boolean>> permutations,
              Set<String> names) {
         String[] namesArray = names.toArray(new String[0]);
-        for (int i=0; i<Math.pow(2, namesArray.length); i++) {
+        for (int i = 0; i < Math.pow(2, namesArray.length); i++) {
             Map<String, Boolean> registersMap = new HashMap<>();
             int num = i;
             int index = 0;
-            for (int j=0; j<namesArray.length; j++) {
+            for (int j = 0; j < namesArray.length; j++) {
                 if (num % 2 == 1) {
                     registersMap.put(namesArray[index], true);
                 } else {
@@ -590,15 +590,19 @@ public class FvmFacadeImpl implements FvmFacade {
         TransitionSystem<Pair<L, Map<String, Object>>, A, String> newTS =
                 this.createTransitionSystem();
 
+        Map<String, Object> initialEval = getInitialEval(pg, actionDefs);
+
         // STATES
         Map<L, Set<Map<String, Object>>> locationToEvalsMap =
-                generateEvalsToAllLocations(pg, actionDefs, conditionDefs);
+                generateEvalsToAllLocations(pg, actionDefs, conditionDefs, initialEval);
         for (L location : pg.getLocations()) {
-            for (Map<String, Object> eval : locationToEvalsMap.get(location)) {
-                Pair<L, Map<String, Object>> state = new Pair<>(location, eval);
-                newTS.addState(state);
-                if (pg.getInitialLocations().contains(location) && isInitialEvaluation(pg, eval)) {
-                    newTS.setInitial(state, true);
+            if (locationToEvalsMap.get(location) != null) {
+                for (Map<String, Object> eval : locationToEvalsMap.get(location)) {
+                    Pair<L, Map<String, Object>> state = new Pair<>(location, eval);
+                    newTS.addState(state);
+                    if (pg.getInitialLocations().contains(location) && eval.equals(initialEval)) {
+                        newTS.setInitial(state, true);
+                    }
                 }
             }
         }
@@ -614,13 +618,24 @@ public class FvmFacadeImpl implements FvmFacade {
         for (L location : pg.getLocations()) {
             newTS.addAtomicProposition(location.toString());
         }
-        for (ConditionDef conditionDef : conditionDefs) {
-            newTS.addAtomicProposition(conditionDef.toString());
+        Set<String> atomicPropositions = new HashSet<>();
+        Set<Map<String, Object>> evals = new HashSet<>();
+        for (Set<Map<String, Object>> evaluation : locationToEvalsMap.values()) {
+            for (Map<String, Object> map : evaluation) {
+                for (String key : map.keySet())
+                atomicPropositions.add(key + " = " + map.get(key));
+            }
+        }
+        for (String ap : atomicPropositions) {
+            newTS.addAtomicProposition(ap);
         }
 
         // LABELING
         for (Pair<L, Map<String, Object>> state : newTS.getStates()) {
-            newTS.addToLabel(state, state.getSecond().toString());
+            Map<String, Object> eval = state.second;
+            for (String key : eval.keySet()) {
+                newTS.addToLabel(state, key + " = " + eval.get(key));
+            }
         }
 
         // TRANSITIONS
@@ -655,17 +670,16 @@ public class FvmFacadeImpl implements FvmFacade {
         return newTS;
     }
 
-    private <A, L> boolean isInitialEvaluation(ProgramGraph<L,A> pg, Map<String, Object> eval) {
-        // TODO: Implement
+    private <A, L> boolean isInitialEvaluation(ProgramGraph<L, A> pg, Map<String, Object> eval) {
         return false;
     }
 
     private <L, A> Map<L, Set<Map<String, Object>>> generateEvalsToAllLocations(
             ProgramGraph<L, A> pg,
             Set<ActionDef> actionDefs,
-            Set<ConditionDef> conditionDefs) {
+            Set<ConditionDef> conditionDefs,
+            Map<String, Object> initialEval) {
         Map<L, Set<Map<String, Object>>> locationToEvalsMap = new HashMap<>();
-        Map<String, Object> initialEval = getInitialEval(pg);
         Set<PGTransition<L, A>> pgTransitions = pg.getTransitions();
         Set<L> pgInitialLocations = pg.getInitialLocations();
         for (L initialLocation : pgInitialLocations) {
@@ -684,41 +698,48 @@ public class FvmFacadeImpl implements FvmFacade {
             Map<L, Set<Map<String, Object>>> locationToEvalsMap,
             Set<ActionDef> actionDefs,
             Set<ConditionDef> conditionDefs,
-            Set<PGTransition<L,A>> pgTransitions,
+            Set<PGTransition<L, A>> pgTransitions,
             L location,
             Map<String, Object> eval) {
+        locationToEvalsMap.computeIfAbsent(location, k -> new HashSet<>());
+        locationToEvalsMap.get(location).add(eval);
         for (PGTransition<L, A> pgTransition : pgTransitions) {
             L from = pgTransition.getFrom();
             if (from.equals(location)) {
                 String cond = pgTransition.getCondition();
-                for (ConditionDef conditionDef : conditionDefs) {
-                    if (conditionDef.evaluate(eval, cond)) {
-                        A action = pgTransition.getAction();
-                        for (ActionDef actionDef : actionDefs) {
-                            if (actionDef.isMatchingAction(action.toString())) {
-                                Map<String, Object> newEval =
-                                        actionDef.effect(eval, action.toString());
-                                L to = pgTransition.getTo();
-                                if (locationToEvalsMap.get(to).add(newEval)) {
-                                    generateEvalsToAllLocations(
-                                            locationToEvalsMap,
-                                            actionDefs,
-                                            conditionDefs,
-                                            pgTransitions,
-                                            to,
-                                            newEval);
-                                }
-                            }
-                        }
+                if (ConditionDef.evaluate(conditionDefs, eval, cond)) {
+                    A action = pgTransition.getAction();
+                    Map<String, Object> newEval = ActionDef.effect(actionDefs, eval, action);
+                    L to = pgTransition.getTo();
+                    locationToEvalsMap.computeIfAbsent(to, k -> new HashSet<>());
+                    if (locationToEvalsMap.get(to).add(newEval)) {
+                        generateEvalsToAllLocations(
+                                locationToEvalsMap,
+                                actionDefs,
+                                conditionDefs,
+                                pgTransitions,
+                                to,
+                                newEval);
+
                     }
                 }
             }
         }
     }
 
-    private <L, A> Map<String, Object> getInitialEval(ProgramGraph<L, A> pg) {
-        pg.getInitalizations();
-        return null;
+    private <L, A> Map<String, Object> getInitialEval(ProgramGraph<L, A> pg, Set<ActionDef> actionDefs) {
+        Map<String, Object> result = new HashMap<>();
+        Set<List<String>> initializationsSet = pg.getInitalizations();
+        for (List<String> initializationList : initializationsSet) {
+            for (String initialization : initializationList) {
+                for (ActionDef actionDef : actionDefs) {
+                    if (actionDef.isMatchingAction(initialization)) {
+                        result = actionDef.effect(result, initialization);
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     @Override
