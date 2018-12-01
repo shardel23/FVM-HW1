@@ -18,7 +18,7 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="inheritedJdk" />
     <orderEntry type="module" module-name="HW-Definitions" />
-    <orderEntry type="module-library" exported="">
+    <orderEntry type="module-library">
       <library name="antlr-4.5.1-complete.jar">
         <CLASSES>
           <root url="jar://$MODULE_DIR$/lib/antlr-4.5.1-complete.jar!/" />
