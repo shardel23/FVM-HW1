@@ -283,8 +283,34 @@ public class FvmFacadeImpl implements FvmFacade {
         createTransitions(ts1, ts2, newTS, handShakingActions);
         createInitialStates(ts1, ts2, newTS);
         createLabels(ts1, ts2, newTS);
+        removeUnreachableFromTS(newTS);
 
         return newTS;
+    }
+
+    private <P, S2, S1, A> void removeUnreachableFromTS(TransitionSystem<Pair<S1,S2>,A,P> ts) {
+        Set<Pair<S1, S2>> reachable = reach(ts);
+        Set<Pair<S1, S2>> allStates = ts.getStates();
+        Set<Pair<S1, S2>> statesToRemove = new HashSet<>();
+        Set<Transition<Pair<S1, S2>, A>> transitions = ts.getTransitions();
+        Set<Transition<Pair<S1, S2>, A>> transitionsToRemove = new HashSet<>();
+        for (Pair<S1, S2> state : allStates) {
+            if (!reachable.contains(state)) {
+                for (Transition<Pair<S1, S2>, A> transition : transitions) {
+                    if (transition.getTo().equals(state) || transition.getFrom().equals(state)) {
+                        transitionsToRemove.add(transition);
+                    }
+                }
+                for (Transition<Pair<S1, S2>, A> transition : transitionsToRemove) {
+                    ts.removeTransition(transition);
+                }
+                ts.getLabelingFunction().remove(state);
+                statesToRemove.add(state);
+            }
+        }
+        for (Pair<S1, S2> state : statesToRemove) {
+            ts.removeState(state);
+        }
     }
 
     private <S1, S2, A, P> Set<Pair<S1, S2>> getPairsOfLeft(TransitionSystem<Pair<S1, S2>, A, P> ts, S1 s) {
