@@ -6,7 +6,6 @@ import il.ac.bgu.cs.fvm.automata.MultiColorAutomaton;
 import il.ac.bgu.cs.fvm.channelsystem.ChannelSystem;
 import il.ac.bgu.cs.fvm.circuits.Circuit;
 import il.ac.bgu.cs.fvm.exceptions.ActionNotFoundException;
-import il.ac.bgu.cs.fvm.exceptions.FVMException;
 import il.ac.bgu.cs.fvm.exceptions.StateNotFoundException;
 import il.ac.bgu.cs.fvm.ltl.LTL;
 import il.ac.bgu.cs.fvm.programgraph.ActionDef;
@@ -326,7 +325,6 @@ public class FvmFacadeImpl implements FvmFacade {
             TransitionSystem<S1, A, P> ts1,
             TransitionSystem<S2, A, P> ts2,
             TransitionSystem<Pair<S1, S2>, A, P> newTS) {
-        //TODO: check if needed shallow or deep
         for (S1 state1 : ts1.getInitialStates()) {
             for (S2 state2 : ts2.getInitialStates()) {
                 newTS.setInitial(new Pair<>(state1, state2), true);
@@ -412,7 +410,6 @@ public class FvmFacadeImpl implements FvmFacade {
                     }
                 }
             }
-            //TODO: check if needed shallow or deep
             else {
                 for (Transition<S1, A> transition1 : ts1.getTransitions()) {
                     for (S2 s2 : ts2.getStates()) {
@@ -447,7 +444,59 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <L1, L2, A> ProgramGraph<Pair<L1, L2>, A> interleave(ProgramGraph<L1, A> pg1, ProgramGraph<L2, A> pg2) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement interleave
+        ProgramGraph<Pair<L1, L2>, A> newPG = createProgramGraph();
+
+        // LOCATIONS
+        for (L1 l1 : pg1.getLocations()) {
+            for (L2 l2 : pg2.getLocations()) {
+                Pair<L1, L2> location = new Pair<>(l1, l2);
+                newPG.addLocation(location);
+                if (pg1.getInitialLocations().contains(l1) && pg2.getInitialLocations().contains(l2)) {
+                    newPG.setInitial(location, true);
+                }
+            }
+        }
+
+        // INITIALIZATION LIST
+        for (List<String> initializations1 : pg1.getInitalizations()) {
+            for (List<String> initializations2 : pg2.getInitalizations()) {
+                ArrayList<String> combinedList = new ArrayList<>(initializations1);
+                combinedList.addAll(initializations2);
+                newPG.addInitalization(combinedList);
+            }
+        }
+
+        // TRANSITIONS
+        for (PGTransition<L1, A> transition1 : pg1.getTransitions()) {
+            L1 from = transition1.getFrom();
+            String cond = transition1.getCondition();
+            A action = transition1.getAction();
+            L1 to = transition1.getTo();
+            for (L2 loc2 : pg2.getLocations()) {
+                newPG.addTransition(
+                        new PGTransition<>(
+                                new Pair<>(from, loc2),
+                                cond,
+                                action,
+                                new Pair<>(to, loc2)));
+            }
+        }
+        for (PGTransition<L2, A> transition2 : pg2.getTransitions()) {
+            L2 from = transition2.getFrom();
+            String cond = transition2.getCondition();
+            A action = transition2.getAction();
+            L2 to = transition2.getTo();
+            for (L1 loc1 : pg1.getLocations()) {
+                newPG.addTransition(
+                        new PGTransition<>(
+                                new Pair<>(loc1, from),
+                                cond,
+                                action,
+                                new Pair<>(loc1, to)));
+            }
+        }
+
+        return newPG;
     }
 
     @Override
@@ -590,11 +639,17 @@ public class FvmFacadeImpl implements FvmFacade {
         TransitionSystem<Pair<L, Map<String, Object>>, A, String> newTS =
                 this.createTransitionSystem();
 
-        Map<String, Object> initialEval = getInitialEval(pg, actionDefs);
-        Map<L, Set<Map<String, Object>>> locationToEvalsMap =
-                statesFromProgramGraph(pg, actionDefs, conditionDefs, newTS, initialEval);
+        List<Map<String, Object>> initialEvals = getInitialEvals(pg, actionDefs);
+        Map<L, Set<Map<String, Object>>> locationToEvalsMap = new HashMap<>();
+        for (Map<String, Object> initialEval : initialEvals) {
+            Map<L, Set<Map<String, Object>>> evals = statesFromProgramGraph(pg, actionDefs, conditionDefs, newTS, initialEval);
+            for (L location : evals.keySet()) {
+                locationToEvalsMap.putIfAbsent(location, new HashSet<>());
+                locationToEvalsMap.get(location).addAll(evals.get(location));
+            }
+        }
         actionsFromProgramGraph(pg, newTS);
-        AtomicPropositionsFromProgramGraph(pg, newTS, locationToEvalsMap);
+        atomicPropositionsFromProgramGraph(pg, newTS, locationToEvalsMap);
         labelsFromProgramGraph(newTS);
         transitionsFromProgramGraph(pg, actionDefs, conditionDefs, newTS);
 
@@ -652,15 +707,16 @@ public class FvmFacadeImpl implements FvmFacade {
         }
     }
 
-    private <L, A> void AtomicPropositionsFromProgramGraph(
+    private <L, A> void atomicPropositionsFromProgramGraph(
             ProgramGraph<L, A> pg,
             TransitionSystem<Pair<L, Map<String, Object>>, A, String> newTS,
             Map<L, Set<Map<String, Object>>> locationToEvalsMap) {
         for (L location : pg.getLocations()) {
-            newTS.addAtomicProposition(location.toString());
+            if (locationToEvalsMap.get(location) != null) {
+                newTS.addAtomicProposition(location.toString());
+            }
         }
         Set<String> atomicPropositions = new HashSet<>();
-        Set<Map<String, Object>> evals = new HashSet<>();
         for (Set<Map<String, Object>> evaluation : locationToEvalsMap.values()) {
             for (Map<String, Object> map : evaluation) {
                 for (String key : map.keySet())
@@ -757,10 +813,11 @@ public class FvmFacadeImpl implements FvmFacade {
         }
     }
 
-    private <L, A> Map<String, Object> getInitialEval(ProgramGraph<L, A> pg, Set<ActionDef> actionDefs) {
-        Map<String, Object> result = new HashMap<>();
+    private <L, A> List<Map<String, Object>> getInitialEvals(ProgramGraph<L, A> pg, Set<ActionDef> actionDefs) {
+        List<Map<String, Object>> initialEvals = new ArrayList<>();
         Set<List<String>> initializationsSet = pg.getInitalizations();
         for (List<String> initializationList : initializationsSet) {
+            Map<String, Object> result = new HashMap<>();
             for (String initialization : initializationList) {
                 for (ActionDef actionDef : actionDefs) {
                     if (actionDef.isMatchingAction(initialization)) {
@@ -768,8 +825,9 @@ public class FvmFacadeImpl implements FvmFacade {
                     }
                 }
             }
+            initialEvals.add(result);
         }
-        return result;
+        return initialEvals;
     }
 
     @Override
