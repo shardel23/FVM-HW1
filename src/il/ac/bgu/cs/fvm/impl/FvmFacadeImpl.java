@@ -288,7 +288,7 @@ public class FvmFacadeImpl implements FvmFacade {
         return newTS;
     }
 
-    private <P, S2, S1, A> void removeUnreachableFromTS(TransitionSystem<Pair<S1,S2>,A,P> ts) {
+    private <P, S2, S1, A> void removeUnreachableFromTS(TransitionSystem<Pair<S1, S2>, A, P> ts) {
         Set<Pair<S1, S2>> reachable = reach(ts);
         Set<Pair<S1, S2>> allStates = ts.getStates();
         Set<Pair<S1, S2>> statesToRemove = new HashSet<>();
@@ -422,42 +422,46 @@ public class FvmFacadeImpl implements FvmFacade {
             TransitionSystem<S2, A, P> ts2,
             TransitionSystem<Pair<S1, S2>, A, P> newTS,
             Set<A> handShakingActions) {
-        for (A action : newTS.getActions()) {
-            if (handShakingActions.contains(action)) {
-                for (Transition<S1, A> transition1 : ts1.getTransitions()) {
-                    for (Transition<S2, A> transition2 : ts2.getTransitions()) {
-                        newTS.addTransition(
-                                new Transition<>(
-                                        new Pair<>(transition1.getFrom(), transition2.getFrom()),
-                                        action,
-                                        new Pair<>(transition1.getTo(), transition2.getTo())
-                                )
-                        );
-                    }
+        for (Transition<S1, A> transition1 : ts1.getTransitions()) {
+            A action1 = transition1.getAction();
+            for (Transition<S2, A> transition2 : ts2.getTransitions()) {
+                A action2 = transition2.getAction();
+                if (action1.equals(action2) && handShakingActions.contains(action1)) {
+                    newTS.addTransition(
+                            new Transition<>(
+                                    new Pair<>(transition1.getFrom(), transition2.getFrom()),
+                                    action1,
+                                    new Pair<>(transition1.getTo(), transition2.getTo())
+                            )
+                    );
                 }
             }
-            else {
-                for (Transition<S1, A> transition1 : ts1.getTransitions()) {
-                    for (S2 s2 : ts2.getStates()) {
-                        newTS.addTransition(
-                                new Transition<>(
-                                        new Pair<>(transition1.getFrom(), s2),
-                                        action,
-                                        new Pair<>(transition1.getTo(), s2)
-                                )
-                        );
-                    }
+        }
+        for (Transition<S1, A> transition1 : ts1.getTransitions()) {
+            A action = transition1.getAction();
+            if (!handShakingActions.contains(action)) {
+                for (S2 s2 : ts2.getStates()) {
+                    newTS.addTransition(
+                            new Transition<>(
+                                    new Pair<>(transition1.getFrom(), s2),
+                                    action,
+                                    new Pair<>(transition1.getTo(), s2)
+                            )
+                    );
                 }
-                for (Transition<S2, A> transition2 : ts2.getTransitions()) {
-                    for (S1 s1 : ts1.getStates()) {
-                        newTS.addTransition(
-                                new Transition<>(
-                                        new Pair<>(s1, transition2.getFrom()),
-                                        action,
-                                        new Pair<>(s1, transition2.getTo())
-                                )
-                        );
-                    }
+            }
+        }
+        for (Transition<S2, A> transition2 : ts2.getTransitions()) {
+            A action = transition2.getAction();
+            if (!handShakingActions.contains(action)) {
+                for (S1 s1 : ts1.getStates()) {
+                    newTS.addTransition(
+                            new Transition<>(
+                                    new Pair<>(s1, transition2.getFrom()),
+                                    action,
+                                    new Pair<>(s1, transition2.getTo())
+                            )
+                    );
                 }
             }
         }
