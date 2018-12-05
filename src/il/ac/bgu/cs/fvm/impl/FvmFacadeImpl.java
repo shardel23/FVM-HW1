@@ -4,6 +4,7 @@ import il.ac.bgu.cs.fvm.FvmFacade;
 import il.ac.bgu.cs.fvm.automata.Automaton;
 import il.ac.bgu.cs.fvm.automata.MultiColorAutomaton;
 import il.ac.bgu.cs.fvm.channelsystem.ChannelSystem;
+import il.ac.bgu.cs.fvm.channelsystem.InterleavingActDef;
 import il.ac.bgu.cs.fvm.channelsystem.ParserBasedInterleavingActDef;
 import il.ac.bgu.cs.fvm.circuits.Circuit;
 import il.ac.bgu.cs.fvm.exceptions.ActionNotFoundException;
@@ -505,18 +506,37 @@ public class FvmFacadeImpl implements FvmFacade {
         }
 
         // TRANSITIONS
+        InterleavingActDef interleavingActDef = new ParserBasedInterleavingActDef();
         for (PGTransition<L1, A> transition1 : pg1.getTransitions()) {
             L1 from = transition1.getFrom();
             String cond = transition1.getCondition();
             A action = transition1.getAction();
-            L1 to = transition1.getTo();
-            for (L2 loc2 : pg2.getLocations()) {
-                newPG.addTransition(
-                        new PGTransition<>(
-                                new Pair<>(from, loc2),
-                                cond,
-                                action,
-                                new Pair<>(to, loc2)));
+            if (interleavingActDef.isOneSidedAction(action.toString())) {
+                for (PGTransition<L2, A> transition2 : pg2.getTransitions()) {
+                    String action1 = action.toString();
+                    String action2 = transition2.getAction().toString();
+                    String actions = action1 + "|" + action2;
+                    if (interleavingActDef.isMatchingAction(actions) &&
+                            action1.substring(0, action1.length() - 1).equals(action2.substring(0, action2.length() - 1))) {
+                        newPG.addTransition(
+                                new PGTransition<>(
+                                        new Pair<>(transition1.getFrom(), transition2.getFrom()),
+                                        cond,
+                                        (A)actions,
+                                        new Pair<>(transition1.getTo(), transition2.getTo())));
+                    }
+                }
+            }
+            else {
+                L1 to = transition1.getTo();
+                for (L2 loc2 : pg2.getLocations()) {
+                    newPG.addTransition(
+                            new PGTransition<>(
+                                    new Pair<>(from, loc2),
+                                    cond,
+                                    action,
+                                    new Pair<>(to, loc2)));
+                }
             }
         }
         for (PGTransition<L2, A> transition2 : pg2.getTransitions()) {
@@ -524,13 +544,15 @@ public class FvmFacadeImpl implements FvmFacade {
             String cond = transition2.getCondition();
             A action = transition2.getAction();
             L2 to = transition2.getTo();
-            for (L1 loc1 : pg1.getLocations()) {
-                newPG.addTransition(
-                        new PGTransition<>(
-                                new Pair<>(loc1, from),
-                                cond,
-                                action,
-                                new Pair<>(loc1, to)));
+            if (!interleavingActDef.isOneSidedAction(action.toString())) {
+                for (L1 loc1 : pg1.getLocations()) {
+                    newPG.addTransition(
+                            new PGTransition<>(
+                                    new Pair<>(loc1, from),
+                                    cond,
+                                    action,
+                                    new Pair<>(loc1, to)));
+                }
             }
         }
 
@@ -698,6 +720,7 @@ public class FvmFacadeImpl implements FvmFacade {
             ProgramGraph<L, A> pg, Set<ActionDef> actionDefs,
             Set<ConditionDef> conditionDefs,
             TransitionSystem<Pair<L, Map<String, Object>>, A, String> newTS) {
+        InterleavingActDef interleavingActDef = new ParserBasedInterleavingActDef();
         for (PGTransition<L, A> pgTransition : pg.getTransitions()) {
             L locationFrom = pgTransition.getFrom();
             String cond = pgTransition.getCondition();
@@ -710,21 +733,39 @@ public class FvmFacadeImpl implements FvmFacade {
                             Map<String, Object> evalFrom = stateFrom.getSecond();
                             Map<String, Object> evalTo = stateTo.getSecond();
                             if (ConditionDef.evaluate(conditionDefs, evalFrom, cond)) {
-                                if (ActionDef.isMatchingAction(actionDefs, action.toString())) {
-                                    if (ActionDef.effect(actionDefs,evalFrom, action.toString()).equals(evalTo)) {
+                                if (interleavingActDef.isMatchingAction(action)) {
+                                    if (ActionDef.effect(actionDefs, evalFrom, action.toString()).equals(evalTo)) {
                                         newTS.addTransition(new Transition<>(
                                                 stateFrom,
                                                 action,
                                                 stateTo
                                         ));
+                                    } else {
+                                        if (evalFrom.equals(evalTo)) {
+                                            newTS.addTransition(new Transition<>(
+                                                    stateFrom,
+                                                    action,
+                                                    stateTo
+                                            ));
+                                        }
                                     }
                                 } else {
-                                    if (evalFrom.equals(evalTo)) {
-                                        newTS.addTransition(new Transition<>(
-                                                stateFrom,
-                                                action,
-                                                stateTo
-                                        ));
+                                    if (ActionDef.isMatchingAction(actionDefs, action.toString())) {
+                                        if (ActionDef.effect(actionDefs, evalFrom, action.toString()).equals(evalTo)) {
+                                            newTS.addTransition(new Transition<>(
+                                                    stateFrom,
+                                                    action,
+                                                    stateTo
+                                            ));
+                                        }
+                                    } else {
+                                        if (evalFrom.equals(evalTo)) {
+                                            newTS.addTransition(new Transition<>(
+                                                    stateFrom,
+                                                    action,
+                                                    stateTo
+                                            ));
+                                        }
                                     }
                                 }
                             }
@@ -837,6 +878,7 @@ public class FvmFacadeImpl implements FvmFacade {
             Set<PGTransition<L, A>> pgTransitions,
             L location,
             Map<String, Object> eval) {
+        InterleavingActDef interleavingActDef = new ParserBasedInterleavingActDef();
         locationToEvalsMap.computeIfAbsent(location, k -> new HashSet<>());
         locationToEvalsMap.get(location).add(eval);
         for (PGTransition<L, A> pgTransition : pgTransitions) {
@@ -846,7 +888,10 @@ public class FvmFacadeImpl implements FvmFacade {
                 if (ConditionDef.evaluate(conditionDefs, eval, cond)) {
                     A action = pgTransition.getAction();
                     Map<String, Object> newEval = eval;
-                    if (ActionDef.isMatchingAction(actionDefs, action)) {
+                    if (interleavingActDef.isMatchingAction(action)) {
+                        newEval = interleavingActDef.effect(eval, action);
+                    }
+                    else if (ActionDef.isMatchingAction(actionDefs, action)) {
                         newEval = ActionDef.effect(actionDefs, eval, action);
                     }
                     if (newEval != null) {
@@ -874,6 +919,9 @@ public class FvmFacadeImpl implements FvmFacade {
     private <L, A> List<Map<String, Object>> getInitialEvals(ProgramGraph<L, A> pg, Set<ActionDef> actionDefs) {
         List<Map<String, Object>> initialEvals = new ArrayList<>();
         Set<List<String>> initializationsSet = pg.getInitalizations();
+        if (initializationsSet.isEmpty()) {
+            initialEvals.add(new HashMap<>());
+        }
         for (List<String> initializationList : initializationsSet) {
             Map<String, Object> result = new HashMap<>();
             for (String initialization : initializationList) {
@@ -898,8 +946,9 @@ public class FvmFacadeImpl implements FvmFacade {
         Set<ActionDef> actionDefs = new HashSet<>();
         Set<ConditionDef> conditionDefs = new HashSet<>();
 
-        actionDefs.add(new ParserBasedInterleavingActDef());
         actionDefs.add(new ParserBasedActDef());
+        //actionDefs.add(new ParserBasedInterleavingActDef());
+
         conditionDefs.add(new ParserBasedCondDef());
 
         TransitionSystem<Pair<List<L>, Map<String, Object>>, A, String> resultTS = transitionSystemFromProgramGraph(resultPG, actionDefs, conditionDefs);
