@@ -4,14 +4,12 @@ import il.ac.bgu.cs.fvm.FvmFacade;
 import il.ac.bgu.cs.fvm.automata.Automaton;
 import il.ac.bgu.cs.fvm.automata.MultiColorAutomaton;
 import il.ac.bgu.cs.fvm.channelsystem.ChannelSystem;
+import il.ac.bgu.cs.fvm.channelsystem.ParserBasedInterleavingActDef;
 import il.ac.bgu.cs.fvm.circuits.Circuit;
 import il.ac.bgu.cs.fvm.exceptions.ActionNotFoundException;
 import il.ac.bgu.cs.fvm.exceptions.StateNotFoundException;
 import il.ac.bgu.cs.fvm.ltl.LTL;
-import il.ac.bgu.cs.fvm.programgraph.ActionDef;
-import il.ac.bgu.cs.fvm.programgraph.ConditionDef;
-import il.ac.bgu.cs.fvm.programgraph.PGTransition;
-import il.ac.bgu.cs.fvm.programgraph.ProgramGraph;
+import il.ac.bgu.cs.fvm.programgraph.*;
 import il.ac.bgu.cs.fvm.transitionsystem.AlternatingSequence;
 import il.ac.bgu.cs.fvm.transitionsystem.Transition;
 import il.ac.bgu.cs.fvm.transitionsystem.TransitionSystem;
@@ -495,6 +493,16 @@ public class FvmFacadeImpl implements FvmFacade {
                 newPG.addInitalization(combinedList);
             }
         }
+        if (pg1.getInitalizations().isEmpty()) {
+            for (List<String> initializations2 : pg2.getInitalizations()) {
+                newPG.addInitalization(initializations2);
+            }
+        }
+        if (pg2.getInitalizations().isEmpty()) {
+            for (List<String> initializations1 : pg1.getInitalizations()) {
+                newPG.addInitalization(initializations1);
+            }
+        }
 
         // TRANSITIONS
         for (PGTransition<L1, A> transition1 : pg1.getTransitions()) {
@@ -733,7 +741,14 @@ public class FvmFacadeImpl implements FvmFacade {
             for (String key : eval.keySet()) {
                 newTS.addToLabel(state, key + " = " + eval.get(key));
             }
-            newTS.addToLabel(state, state.getFirst().toString());
+            if (state.getFirst() instanceof List) {
+                for (Object o : (List)state.getFirst()) {
+                    newTS.addToLabel(state, o.toString());
+                }
+            }
+            else {
+                newTS.addToLabel(state, state.getFirst().toString());
+            }
         }
     }
 
@@ -741,12 +756,17 @@ public class FvmFacadeImpl implements FvmFacade {
             ProgramGraph<L, A> pg,
             TransitionSystem<Pair<L, Map<String, Object>>, A, String> newTS,
             Map<L, Set<Map<String, Object>>> locationToEvalsMap) {
+        Set<String> atomicPropositions = new HashSet<>();
         for (L location : pg.getLocations()) {
             if (locationToEvalsMap.get(location) != null) {
-                newTS.addAtomicProposition(location.toString());
+                if (location instanceof List) {
+                    atomicPropositions.addAll((List)location);
+                }
+                else {
+                    newTS.addAtomicProposition(location.toString());
+                }
             }
         }
-        Set<String> atomicPropositions = new HashSet<>();
         for (Set<Map<String, Object>> evaluation : locationToEvalsMap.values()) {
             for (Map<String, Object> map : evaluation) {
                 for (String key : map.keySet())
@@ -825,18 +845,26 @@ public class FvmFacadeImpl implements FvmFacade {
                 String cond = pgTransition.getCondition();
                 if (ConditionDef.evaluate(conditionDefs, eval, cond)) {
                     A action = pgTransition.getAction();
-                    Map<String, Object> newEval = ActionDef.effect(actionDefs, eval, action);
-                    L to = pgTransition.getTo();
-                    locationToEvalsMap.computeIfAbsent(to, k -> new HashSet<>());
-                    if (locationToEvalsMap.get(to).add(newEval)) {
-                        generateEvalsToAllLocations(
-                                locationToEvalsMap,
-                                actionDefs,
-                                conditionDefs,
-                                pgTransitions,
-                                to,
-                                newEval);
+                    Map<String, Object> newEval = eval;
+                    if (ActionDef.isMatchingAction(actionDefs, action)) {
+                        newEval = ActionDef.effect(actionDefs, eval, action);
+                    }
+                    if (newEval != null) {
+                        L to = pgTransition.getTo();
+                        locationToEvalsMap.computeIfAbsent(to, k -> new HashSet<>());
+                        if (locationToEvalsMap.get(to).add(newEval)) {
+                            generateEvalsToAllLocations(
+                                    locationToEvalsMap,
+                                    actionDefs,
+                                    conditionDefs,
+                                    pgTransitions,
+                                    to,
+                                    newEval);
 
+                        }
+                    }
+                    else {
+                        newEval = eval;
                     }
                 }
             }
@@ -849,10 +877,8 @@ public class FvmFacadeImpl implements FvmFacade {
         for (List<String> initializationList : initializationsSet) {
             Map<String, Object> result = new HashMap<>();
             for (String initialization : initializationList) {
-                for (ActionDef actionDef : actionDefs) {
-                    if (actionDef.isMatchingAction(initialization)) {
-                        result = actionDef.effect(result, initialization);
-                    }
+                if (ActionDef.isMatchingAction(actionDefs, initialization)) {
+                    result = ActionDef.effect(actionDefs, result, initialization);
                 }
             }
             initialEvals.add(result);
@@ -862,7 +888,89 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <L, A> TransitionSystem<Pair<List<L>, Map<String, Object>>, A, String> transitionSystemFromChannelSystem(ChannelSystem<L, A> cs) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement transitionSystemFromChannelSystem
+        List<ProgramGraph<L,A>> pgs = cs.getProgramGraphs();
+        ProgramGraph<List<L>,A> resultPG = transposePG(pgs.get(0));
+        for (int i=1; i<pgs.size(); i++) {
+            ProgramGraph<Pair<List<L>, L>, A> product = interleave(resultPG, pgs.get(i));
+            resultPG = transpose(product);
+        }
+
+        Set<ActionDef> actionDefs = new HashSet<>();
+        Set<ConditionDef> conditionDefs = new HashSet<>();
+
+        actionDefs.add(new ParserBasedInterleavingActDef());
+        actionDefs.add(new ParserBasedActDef());
+        conditionDefs.add(new ParserBasedCondDef());
+
+        TransitionSystem<Pair<List<L>, Map<String, Object>>, A, String> resultTS = transitionSystemFromProgramGraph(resultPG, actionDefs, conditionDefs);
+        return resultTS;
+    }
+
+    private <L, A> ProgramGraph<List<L>, A> transposePG(ProgramGraph<L, A> pg) {
+        ProgramGraph<List<L>, A> newPG = createProgramGraph();
+
+        for (L loc : pg.getLocations()) {
+            List<L> newLoc = new ArrayList<>();
+            newLoc.add(loc);
+            newPG.addLocation(newLoc);
+            if (pg.getInitialLocations().contains(loc)) {
+                newPG.setInitial(newLoc, true);
+            }
+        }
+
+        for (PGTransition<L,A> transition : pg.getTransitions()) {
+            List<L> newFrom = new ArrayList<>();
+            newFrom.add(transition.getFrom());
+            List<L> newTo = new ArrayList<>();
+            newTo.add(transition.getTo());
+            newPG.addTransition(
+                    new PGTransition<>(
+                            newFrom,
+                            transition.getCondition(),
+                            transition.getAction(),
+                            newTo));
+        }
+
+        for (List<String> initialization : pg.getInitalizations()) {
+            newPG.addInitalization(initialization);
+        }
+
+        return newPG;
+    }
+
+    private <L, A> ProgramGraph<List<L>, A> transpose(ProgramGraph<Pair<List<L>, L>, A> pg) {
+        ProgramGraph<List<L>, A> newPG = createProgramGraph();
+
+        for (Pair<List<L>,L> loc : pg.getLocations()) {
+            List<L> newLoc = new ArrayList<>();
+            newLoc.addAll(loc.first);
+            newLoc.add(loc.second);
+            newPG.addLocation(newLoc);
+            if (pg.getInitialLocations().contains(loc)) {
+                newPG.setInitial(newLoc, true);
+            }
+        }
+
+        for (PGTransition<Pair<List<L>,L>,A> transition : pg.getTransitions()) {
+            List<L> newFrom = new ArrayList<>();
+            newFrom.addAll(transition.getFrom().first);
+            newFrom.add(transition.getFrom().second);
+            List<L> newTo = new ArrayList<>();
+            newTo.addAll(transition.getTo().first);
+            newTo.add(transition.getTo().second);
+            newPG.addTransition(
+                    new PGTransition<>(
+                            newFrom,
+                            transition.getCondition(),
+                            transition.getAction(),
+                            newTo));
+        }
+
+        for (List<String> initialization : pg.getInitalizations()) {
+            newPG.addInitalization(initialization);
+        }
+
+        return newPG;
     }
 
     @Override
