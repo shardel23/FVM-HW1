@@ -75,10 +75,15 @@ public class ProgramGraphImpl <L, A> implements ProgramGraph<L, A> {
     public void removeLocation(L l) {
         locations.remove(l);
         initialLocations.remove(l);
+        Set<PGTransition<L, A>> toRemove = new HashSet<>();
         for (PGTransition<L, A> transition : transitions) {
             if (transition.getFrom().equals(l) || transition.getTo().equals(l)) {
-                transitions.remove(transition);
+                //transitions.remove(transition);
+                toRemove.add(transition);
             }
+        }
+        for(PGTransition<L, A> remove : toRemove){
+            transitions.remove(remove);
         }
     }
 
