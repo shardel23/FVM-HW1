@@ -1025,11 +1025,6 @@ public class FvmFacadeImpl implements FvmFacade {
     }
 
     @Override
-    public <Sts, Saut, A, P> TransitionSystem<Pair<Sts, Saut>, A, Saut> product(TransitionSystem<Sts, A, P> ts, Automaton<Saut, P> aut) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement product
-    }
-
-    @Override
     public ProgramGraph<String, String> programGraphFromNanoPromela(String filename) throws Exception {
         NanoPromelaParser.StmtContext root = NanoPromelaFileReader.pareseNanoPromelaFile(filename);
         return getPGfromStmt(root);
@@ -1212,6 +1207,113 @@ public class FvmFacadeImpl implements FvmFacade {
             }
         }
         return locs;
+    }
+
+    @Override
+    public <Sts, Saut, A, P> TransitionSystem<Pair<Sts, Saut>, A, Saut> product(TransitionSystem<Sts, A, P> ts, Automaton<Saut, P> aut) {
+        TransitionSystem<Pair<Sts,Saut>, A, Saut> ans = new TransitionSystemImpl<>();
+
+        //S
+        for(Sts sts : ts.getStates()){
+            for(Saut saut : aut.getTransitions().keySet()){
+                ans.addState(new Pair<>(sts, saut));
+            }
+        }
+
+        //ACT
+        ans.addAllActions(ts.getActions());
+
+        //->
+        for(Pair<Sts, Saut> uno : ans.getStates()){
+            for(Pair<Sts, Saut> dos : ans.getStates()){
+                Sts firstTS = uno.getFirst();
+                Sts secondTS = dos.getFirst();
+                Saut firstAut = uno.getSecond();
+                Saut secondAut = dos.getSecond();
+                A act = null;
+                boolean isIn = false;
+
+                for(Transition<Sts, A> transition : ts.getTransitions()){
+                    if(transition.getFrom().equals(firstTS) && transition.getTo().equals(secondTS)){
+                        act = transition.getAction();
+                    }
+                }
+
+
+                Set<Saut> sauts = aut.getTransitions().get(firstAut).get(ts.getLabel(secondTS));
+                if(sauts.contains(secondAut)){
+                    isIn = true;
+                }
+
+                if(act!= null && isIn){
+                    ans.addTransition(new Transition<>(uno, act, dos));
+                }
+            }
+        }
+        //I
+        for(Sts sts : ts.getInitialStates()){
+            Set<P> aps = ts.getLabel(sts);
+            for(Saut saut : aut.getInitialStates()){
+                Set<Saut> lamda = aut.getTransitions().get(saut).get(aps);
+                for(Saut saut1 : lamda){
+                    ans.setInitial(new Pair<Sts, Saut>(sts, saut1), true);
+                }
+            }
+        }
+        //AP
+        ans.addAllAtomicPropositions(aut.getTransitions().keySet());
+        //L
+        for(Pair<Sts, Saut> pair : ans.getStates()){
+            ans.addToLabel(pair, pair.getSecond());
+        }
+
+
+        //remove unreachable states
+        Set<Pair<Sts, Saut>> reachableStates = reach(ans);
+        Set<Pair<Sts, Saut>> toRemove = new HashSet<>();
+        for(Pair<Sts, Saut> pair : ans.getStates()){
+            if(!reachableStates.contains(pair)){
+                toRemove.add(pair);
+            }
+        }
+
+        for(Pair<Sts, Saut> pair : toRemove){
+            Set<Transition<Pair<Sts, Saut>, A>> transitionsToRemove = new HashSet<>();
+            for (Transition<Pair<Sts, Saut>, A> transition : ans.getTransitions()) {
+                if (transition.getFrom().equals(pair) || transition.getTo().equals(pair)) {
+                    transitionsToRemove.add(transition);
+                }
+            }
+            for(Transition<Pair<Sts,Saut>, A> transition : transitionsToRemove){
+                ans.removeTransition(transition);
+            }
+            Set<Saut> labels = ans.getLabel(pair);
+            for(Saut label : labels){
+                ans.removeLabel(pair, label);
+            }
+            if(ans.getInitialStates().contains(pair)){
+                ans.setInitial(pair, false);
+            }
+            ans.removeState(pair);
+        }
+        Set<Saut> apToRemove = new HashSet<>();
+        for(Saut saut : ans.getAtomicPropositions()){
+            Map<Pair<Sts, Saut>, Set<Saut>> labels = ans.getLabelingFunction();
+            boolean isPresent = false;
+            for(Set<Saut> sautSet : labels.values()){
+                if(sautSet.contains(saut)){
+                    isPresent = true;
+                }
+            }
+            if(!isPresent){
+                apToRemove.add(saut);
+            }
+        }
+        for(Saut saut : apToRemove){
+            ans.removeAtomicProposition(saut);
+        }
+
+        return ans;
     }
 
     @Override

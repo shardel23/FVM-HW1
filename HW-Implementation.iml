@@ -17,7 +17,6 @@
     </content>
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="inheritedJdk" />
-    <orderEntry type="module" module-name="HW-Definitions" />
     <orderEntry type="module-library">
       <library name="antlr-4.5.1-complete.jar">
         <CLASSES>
@@ -54,5 +53,6 @@
         <SOURCES />
       </library>
     </orderEntry>
+    <orderEntry type="module" module-name="HW-Definitions" />
   </component>
 </module>
