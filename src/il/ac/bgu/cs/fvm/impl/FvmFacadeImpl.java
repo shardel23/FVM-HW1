@@ -15,7 +15,10 @@ import il.ac.bgu.cs.fvm.transitionsystem.AlternatingSequence;
 import il.ac.bgu.cs.fvm.transitionsystem.Transition;
 import il.ac.bgu.cs.fvm.transitionsystem.TransitionSystem;
 import il.ac.bgu.cs.fvm.util.Pair;
+import il.ac.bgu.cs.fvm.verification.VerificationFailed;
 import il.ac.bgu.cs.fvm.verification.VerificationResult;
+import il.ac.bgu.cs.fvm.verification.VerificationSucceeded;
+
 import java.io.InputStream;
 import java.util.*;
 
@@ -1044,7 +1047,96 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public <S, A, P, Saut> VerificationResult<S> verifyAnOmegaRegularProperty(TransitionSystem<S, A, P> ts, Automaton<Saut, P> aut) {
-        throw new UnsupportedOperationException("Not supported yet."); // TODO: Implement verifyAnOmegaRegularProperty
+        TransitionSystem<Pair<S, Saut>, A, Saut> prod = product(ts, aut);
+        Set<Saut> acceptingStates = aut.getAcceptingStates();
+        Set<Pair<S, Saut>> r = new HashSet<>();
+        Set<Pair<S, Saut>> rNot = new HashSet<>();
+        Stack<Pair<S, Saut>> u = new Stack<>();
+        Set<Pair<S, Saut>> t;
+        Stack<Pair<S, Saut>> v;
+
+        for (Pair<S, Saut> s : prod.getInitialStates()) { // TODO: Check if required I/R instead of I
+            visit(prod, acceptingStates, r, rNot, u, s);
+        }
+        for (Pair<S, Saut> s : rNot) {
+            t = new HashSet<>();
+            v = new Stack<>();
+            if (cycleCheck(prod, t, v, s)) {
+                return new VerificationFailed<>();
+            }
+        }
+        return new VerificationSucceeded<>();
+    }
+
+    private <S, A, Saut> void visit(
+            TransitionSystem<Pair<S, Saut>, A, Saut> prod,
+            Set<Saut> acceptingStates,
+            Set<Pair<S, Saut>> r,
+            Set<Pair<S, Saut>> rNot,
+            Stack<Pair<S, Saut>> u,
+            Pair<S, Saut> s) {
+        u.push(s);
+        r.add(s);
+        do {
+            Pair<S, Saut> st = u.peek();
+            if (r.containsAll(post(prod, st))) {
+                u.pop();
+                if (acceptingStates.contains(st.getSecond())) {
+                    rNot.add(st);
+                }
+            }
+            else {
+                Pair<S, Saut> stt = minus(post(prod, st), r);
+                u.push(stt);
+                r.add(stt);
+            }
+        } while (!u.empty());
+    }
+
+    private <S, A, Saut> boolean cycleCheck(
+            TransitionSystem<Pair<S, Saut>, A, Saut> prod,
+            Set<Pair<S, Saut>> t,
+            Stack<Pair<S, Saut>> v,
+            Pair<S, Saut> s) {
+        boolean cycleFound = false;
+        v.push(s);
+        t.add(s);
+        do {
+            Pair<S, Saut> st = v.peek();
+            if (post(prod, st).contains(s)) {
+                cycleFound = true;
+            }
+            else {
+                if (minus(post(prod, st), t) != null) {
+                    Pair<S, Saut> stt = minus(post(prod, st), t);
+                    v.push(stt);
+                    t.add(stt);
+                }
+                else {
+                    v.pop();
+                }
+            }
+        }
+        while (!v.empty() && !cycleFound);
+        return cycleFound;
+    }
+
+    /**
+     * Assumes set1 contains exactly 1 element more than s2. Returns it.
+     * @param set1
+     * @param set2
+     * @param <S>
+     * @param <A>
+     * @param <Saut>
+     * @return
+     */
+    private <S, A, Saut> Pair<S, Saut> minus(Set<Pair<S, Saut>> set1, Set<Pair<S, Saut>> set2) {
+        for (Pair<S, Saut> s : set1) {
+            if (!set2.contains(s)) {
+                return s;
+            }
+        }
+        return null;
     }
 
     @Override
