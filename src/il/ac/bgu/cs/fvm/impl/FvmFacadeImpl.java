@@ -20,6 +20,7 @@ import il.ac.bgu.cs.fvm.util.Pair;
 import il.ac.bgu.cs.fvm.verification.VerificationFailed;
 import il.ac.bgu.cs.fvm.verification.VerificationResult;
 import il.ac.bgu.cs.fvm.verification.VerificationSucceeded;
+import org.antlr.v4.runtime.tree.ParseTree;
 
 import java.io.InputStream;
 import java.util.*;
@@ -1029,21 +1030,201 @@ public class FvmFacadeImpl implements FvmFacade {
 
     @Override
     public ProgramGraph<String, String> programGraphFromNanoPromela(String filename) throws Exception {
+        ProgramGraph<String, String> ansPG = new ProgramGraphImpl<>();
         NanoPromelaParser.StmtContext root = NanoPromelaFileReader.pareseNanoPromelaFile(filename);
-        return getPGfromStmt(root);
+        String rootTXT = root.getText();
+
+        ansPG.addLocation("");
+        ansPG.addLocation(rootTXT);
+        ansPG.setInitial(rootTXT, true);
+        PGFromNP(ansPG, root, rootTXT, "", "", "");
+
+        return ansPG;
     }
 
     @Override
     public ProgramGraph<String, String> programGraphFromNanoPromelaString(String nanopromela) throws Exception {
+        ProgramGraph<String, String> ansPG = new ProgramGraphImpl<>();
         NanoPromelaParser.StmtContext root = NanoPromelaFileReader.pareseNanoPromelaString(nanopromela);
-        return getPGfromStmt(root);
+        String rootTXT = root.getText();
+
+        ansPG.addLocation("");
+        ansPG.addLocation(rootTXT);
+        ansPG.setInitial(rootTXT, true);
+        PGFromNP(ansPG, root, rootTXT, "", "", "");
+
+        return ansPG;
     }
 
     @Override
     public ProgramGraph<String, String> programGraphFromNanoPromela(InputStream inputStream) throws Exception {
+        ProgramGraph<String, String> ansPG = new ProgramGraphImpl<>();
         NanoPromelaParser.StmtContext root = NanoPromelaFileReader.parseNanoPromelaStream(inputStream);
-        return getPGfromStmt(root);
+        String rootTXT = root.getText();
+
+        ansPG.addLocation("");
+        ansPG.addLocation(rootTXT);
+        ansPG.setInitial(rootTXT, true);
+        PGFromNP(ansPG, root, rootTXT, "", "", "");
+
+        return ansPG;
     }
+
+    private void PGFromNP(ProgramGraph<String, String> ansPG, ParseTree myRoot, String fromNode, String toNode, String cond, String post_np){
+        int childCount = myRoot.getChildCount();
+        String child;
+
+        if(myRoot instanceof NanoPromelaParser.IfstmtContext)
+            processIf(ansPG, myRoot, fromNode, toNode, cond, post_np);
+        else if(myRoot instanceof NanoPromelaParser.DostmtContext)
+            processDo(ansPG, myRoot, fromNode, toNode, cond, post_np);
+        else if(!(myRoot instanceof NanoPromelaParser.StmtContext))
+            processOtherCase(ansPG, myRoot, fromNode, toNode, cond, post_np);
+        else if(childCount > 1){
+            child = myRoot.getChild(1).getText();
+            if(child.equals(";"))
+                processStmt(ansPG, myRoot, fromNode, toNode, cond, post_np);
+        }
+        else
+            PGFromNP(ansPG, myRoot.getChild(0), fromNode, toNode, cond, post_np);
+    }
+
+    private void processIf(ProgramGraph<String, String> ansPG, ParseTree myRoot, String fromNode, String toNode, String cond, String post_np){
+        int rootChildNum = myRoot.getChildCount() - 1;
+        String ansCond, bracketsCond, ifCond;
+        ParseTree child;
+
+        for(int i = 1; i < rootChildNum; i++){
+            child = myRoot.getChild(i).getChild(3);
+            bracketsCond = "(" + cond + ")";
+            ifCond = "(" + myRoot.getChild(i).getChild(1).getText() + ")";
+
+            if(bracketsCond.equals("()"))
+                ansCond = ifCond;
+            else if(ifCond.equals("()"))
+                ansCond = bracketsCond;
+            else
+                ansCond = bracketsCond + " && " + ifCond;
+
+            PGFromNP(ansPG, child, fromNode, toNode, ansCond, post_np);
+        }
+    }
+
+    private <L, A> void processDo(ProgramGraph<String, String> ansPG, ParseTree myRoot, String fromNode, String toNode, String cond, String post_np){
+        int rootChildNum = myRoot.getChildCount() - 1;
+        String ansCond, fromTransAns, rootTXT = myRoot.getText(), from_trans3 = toNode + post_np, consitionTransAns, doConds = "", switchedCond, finishDoCond = "";
+
+        for(int i = 1; i < rootChildNum; i++){
+            DoHelper(ansPG, myRoot, fromNode, toNode, cond, post_np, i);
+            ansCond = myRoot.getChild(i).getChild(1).getText();
+            switchedCond = switchCondition(ansCond);
+            finishDoCond = finishDoCond + switchedCond + " && ";
+            doConds = doConds + "(" + ansCond + ") || ";
+        }
+        doConds = doConds.substring(0, doConds.length() - 4);
+        finishDoCond = finishDoCond.substring(0, finishDoCond.length() - 4);
+
+        if(rootTXT.equals("") || rootTXT.equals("()")) fromTransAns = from_trans3;
+        else if(from_trans3.equals("") || from_trans3.equals("()")) fromTransAns = rootTXT;
+        else fromTransAns = rootTXT + ";" + from_trans3;
+
+        if(cond.equals("") || cond.equals("()")) consitionTransAns = finishDoCond;
+        else if(finishDoCond.equals("")) consitionTransAns = cond;
+        else consitionTransAns = cond + " && (!(" + doConds + "))";
+
+        PGTransition<L, A> trans_pg = new PGTransition<>((L)fromTransAns, finishDoCond, (A) "", (L)(toNode + post_np));
+        ((ProgramGraph<L, A>) ansPG).addLocation(trans_pg.getFrom());
+        ((ProgramGraph<L, A>) ansPG).addLocation(trans_pg.getTo());
+        ((ProgramGraph<L, A>) ansPG).addTransition(trans_pg);
+
+        PGTransition<L, A> trans_pg1 = new PGTransition<>((L)fromNode, consitionTransAns, (A) "", (L)(toNode + post_np));
+        ((ProgramGraph<L, A>) ansPG).addLocation(trans_pg1.getFrom());
+        ((ProgramGraph<L, A>) ansPG).addLocation(trans_pg1.getTo());
+        ((ProgramGraph<L, A>) ansPG).addTransition(trans_pg1);
+    }
+
+    private String switchCondition(String cond){
+        StringBuilder SB = new StringBuilder();
+
+        for(int i = 0; i < cond.length(); i++){
+            if(cond.charAt(i) == '>' && cond.charAt(i + 1) == '='){
+                SB.append('<');
+                i++;
+            }
+            else if(cond.charAt(i) == '<' && cond.charAt(i + 1) == '='){
+                SB.append('>');
+                i++;
+            }
+            else if(cond.charAt(i) == '>')
+                SB.append("<=");
+            else if(cond.charAt(i) == '<')
+                SB.append(">=");
+            else if(cond.charAt(i) == '=' && cond.charAt(i + 1) == '='){
+                SB.append("!=");
+                i++;
+            }
+            else if(cond.charAt(i) == 't' && cond.charAt(i + 1) == 'r' && cond.charAt(i + 2) == 'u' && cond.charAt(i + 3) == 'e'){
+                SB.append("!true");
+                i += 3;
+            }
+            else SB.append(cond.charAt(i));
+        }
+        return SB.toString();
+    }
+
+    private void DoHelper(ProgramGraph<String, String> ansPG, ParseTree myRoot, String fromNode, String toNode, String cond, String post_np, int i){
+        String ansCond = myRoot.getChild(i).getChild(1).getText();
+        ParseTree child = myRoot.getChild(i).getChild(3);
+        String rootTXT = myRoot.getText(), ansPost, bracketsCond, cond3, ansCondUpdate, ansFrom, ansFromFinal;
+
+        if(rootTXT.equals("") || rootTXT.equals("()")) ansPost = post_np;
+        else if(post_np.equals("") || post_np.equals("()")) ansPost = rootTXT;
+        else ansPost = rootTXT + ";" + post_np;
+
+        bracketsCond = "(" + cond + ")";
+        cond3 = "(" + ansCond + ")";
+        if(bracketsCond.equals("()")) ansCondUpdate = cond3;
+        else if(cond3.equals("()")) ansCondUpdate = bracketsCond;
+        else ansCondUpdate = cond + " && (" + cond3 + ")";
+
+        if(rootTXT.equals("") || rootTXT.equals("()")) ansFrom = toNode;
+        else if(toNode.equals("") || toNode.equals("()")) ansFrom = rootTXT;
+        else ansFrom = rootTXT + ";" + toNode;
+
+        if(ansFrom.equals("") || ansFrom.equals("()")) ansFromFinal = post_np;
+        else if(post_np.equals("") || post_np.equals("()")) ansFromFinal = ansFrom;
+        else ansFromFinal = ansFrom + ";" + post_np;
+
+        PGFromNP(ansPG, child, fromNode, toNode, ansCondUpdate, ansPost);
+        PGFromNP(ansPG, child, ansFromFinal, toNode, cond3, ansPost);
+    }
+
+    private <L, A> void processOtherCase(ProgramGraph<String, String> ansPG, ParseTree myRoot, String fromNode, String toNode, String cond, String post_np) {
+        String to_ans;
+
+        if(toNode.equals("") || toNode.equals("()")) to_ans = post_np;
+        else if(post_np.equals("") || post_np.equals("()")) to_ans = toNode;
+        else to_ans = toNode + ";" + post_np;
+
+        PGTransition<L, A> trans_pg = new PGTransition<>((L)fromNode, cond, (A)myRoot.getText(), (L)to_ans);
+        ((ProgramGraph<L, A>) ansPG).addLocation(trans_pg.getFrom());
+        ((ProgramGraph<L, A>) ansPG).addLocation(trans_pg.getTo());
+        ((ProgramGraph<L, A>) ansPG).addTransition(trans_pg);
+    }
+
+    private void processStmt(ProgramGraph<String, String> ansPG, ParseTree myRoot, String fromNode, String toNode, String cond, String post_np){
+        ParseTree child0 = myRoot.getChild(0), child2 = myRoot.getChild(2);
+        String child2TXT = child2.getText(), ansPost;
+
+        if(child2TXT.equals("") || child2TXT.equals("()")) ansPost = post_np;
+        else if(post_np.equals("") || post_np.equals("()")) ansPost = child2TXT;
+        else ansPost = child2TXT + ";" + post_np;
+
+        PGFromNP(ansPG, child0, fromNode, toNode, cond, ansPost);
+        PGFromNP(ansPG, child2, ansPost, toNode, "", post_np);
+    }
+
+
 
     private ProgramGraph<String, String> getPGfromStmt(NanoPromelaParser.StmtContext root) {
         ProgramGraph<String, String> newPG = new ProgramGraphImpl<>();
@@ -1244,7 +1425,7 @@ public class FvmFacadeImpl implements FvmFacade {
 
 
                 Set<Saut> sauts = aut.getTransitions().get(firstAut).get(ts.getLabel(secondTS));
-                if(sauts.contains(secondAut)){
+                if(sauts != null && sauts.contains(secondAut)){
                     isIn = true;
                 }
 
@@ -1335,11 +1516,61 @@ public class FvmFacadeImpl implements FvmFacade {
         for (Pair<S, Saut> s : rNot) {
             t = new HashSet<>();
             v = new Stack<>();
-            if (cycleCheck(prod, t, v, s)) {
-                return new VerificationFailed<>();
+            List<S> cycle = cycleCheck(prod, t, v, s);
+            if (!cycle.isEmpty()) {
+                VerificationFailed<S> vr = new VerificationFailed<>();
+                List<S> prefix = new LinkedList<>();
+                for (Pair<S, Saut> i : prod.getInitialStates()) { // TODO: Check if required I/R instead of I
+                    prefix = getPrefix(prod, i, s);
+                    if (!prefix.isEmpty()) {
+                        break;
+                    }
+                }
+                vr.setCycle(cycle);
+                vr.setPrefix(prefix);
+                return vr;
             }
         }
         return new VerificationSucceeded<>();
+    }
+
+    private <S, A, Saut> List<S> getPrefix(
+            TransitionSystem<Pair<S, Saut>, A, Saut> prod,
+            Pair<S, Saut> i,
+            Pair<S, Saut> s) {
+        Set<Pair<S, Saut>> r = new HashSet<>();
+        Stack<Pair<S, Saut>> u = new Stack<>();
+        List<S> prefix = new LinkedList<>();
+        u.push(i);
+        r.add(i);
+        do {
+            Pair<S, Saut> st = u.peek();
+            if (r.containsAll(post(prod, st))) {
+                u.pop();
+                if (st.equals(s)) {
+                    //Found S
+                    Stack<Pair<S, Saut>> reversed = reverse(u);
+                    while (!reversed.empty()) {
+                        prefix.add(reversed.pop().first);
+                    }
+                    return prefix;
+                }
+            }
+            else {
+                Pair<S, Saut> stt = minus(post(prod, st), r);
+                u.push(stt);
+                r.add(stt);
+            }
+        } while (!u.empty());
+        return prefix;
+    }
+
+    private <T> Stack<T> reverse(Stack<T> s) {
+        Stack<T> reversed = new Stack<>();
+        while (!s.empty()) {
+            reversed.push(s.pop());
+        }
+        return reversed;
     }
 
     private <S, A, Saut> void visit(
@@ -1367,17 +1598,22 @@ public class FvmFacadeImpl implements FvmFacade {
         } while (!u.empty());
     }
 
-    private <S, A, Saut> boolean cycleCheck(
+    private <S, A, Saut> List<S> cycleCheck(
             TransitionSystem<Pair<S, Saut>, A, Saut> prod,
             Set<Pair<S, Saut>> t,
             Stack<Pair<S, Saut>> v,
             Pair<S, Saut> s) {
+        List<S> cycle = new ArrayList<>();
         boolean cycleFound = false;
         v.push(s);
         t.add(s);
         do {
             Pair<S, Saut> st = v.peek();
             if (post(prod, st).contains(s)) {
+                Stack<Pair<S, Saut>> reversed = reverse(v);
+                while (!reversed.empty()) {
+                    cycle.add(reversed.pop().first);
+                }
                 cycleFound = true;
             }
             else {
@@ -1392,7 +1628,7 @@ public class FvmFacadeImpl implements FvmFacade {
             }
         }
         while (!v.empty() && !cycleFound);
-        return cycleFound;
+        return cycle;
     }
 
     /**
